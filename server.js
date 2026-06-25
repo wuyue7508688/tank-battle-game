@@ -7,6 +7,8 @@ const { Server } = require("socket.io");
 const PORT = Number(process.env.PORT || 3000);
 const TICK_RATE = 60;
 const DT = 1 / TICK_RATE;
+const STATE_BROADCAST_RATE = 30;
+const STATE_BROADCAST_INTERVAL_MS = 1000 / STATE_BROADCAST_RATE;
 const WORLD_WIDTH = 1280;
 const WORLD_HEIGHT = 720;
 const TILE = 32;
@@ -62,6 +64,7 @@ const usedRoomCodes = new Set();
 let nextRoomId = 1;
 let nextBulletId = 1;
 let nextWallId = 1;
+let lastStateBroadcastAt = 0;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -344,6 +347,8 @@ function createRoom(host, config) {
     endedInfo: null,
     bullets: [],
     mapState: createMapDefinition(mapKey),
+    mapVersion: 1,
+    mapDirty: true,
     countdownEndsAt: null,
     emptyTeamSince: { red: null, blue: null },
     createdAt: now,
@@ -430,6 +435,27 @@ function emitRoomState(room) {
   emitLobbyState();
 }
 
+function publicMapState(room) {
+  return {
+    roomId: room.id,
+    map: room.map,
+    mapName: MAP_NAMES[room.map],
+    mapVersion: room.mapVersion,
+    walls: room.mapState.walls,
+    zones: room.mapState.zones,
+  };
+}
+
+function emitMapState(room, target = io.to(room.id)) {
+  target.emit("mapState", publicMapState(room));
+  room.mapDirty = false;
+}
+
+function markMapDirty(room) {
+  room.mapVersion += 1;
+  room.mapDirty = true;
+}
+
 function leaveSocketRoom(socket, room) {
   if (room) socket.leave(room.id);
 }
@@ -502,6 +528,7 @@ function resetRoomForMatch(room) {
   room.endedInfo = null;
   room.bullets = [];
   room.mapState = createMapDefinition(room.map);
+  markMapDirty(room);
   room.countdownEndsAt = Date.now() + 3000;
   room.emptyTeamSince = { red: null, blue: null };
 
@@ -661,6 +688,7 @@ function restoreDisconnectedPlayer(socket, player, previousPlayerId) {
 
   if ((room.status === ROOM_STATUS.PLAYING || room.status === ROOM_STATUS.COUNTDOWN) && player.team) {
     spawnPlayer(room, player, true);
+    emitMapState(room, socket);
   }
 
   emitRoomState(room);
@@ -680,6 +708,7 @@ function updateRoomConfig(socket, player, data) {
   room.scoreLimit = normalizeScoreLimit(data.scoreLimit ?? room.scoreLimit);
   room.timeLimit = normalizeTimeLimit(data.timeLimit ?? room.timeLimit);
   room.mapState = createMapDefinition(room.map);
+  markMapDirty(room);
   emitRoomState(room);
 }
 
@@ -841,7 +870,10 @@ function updateBullets(room, dt, now) {
     for (const wall of room.mapState.walls) {
       if (!wall.alive) continue;
       if (!circleRectCollides(bullet.x, bullet.y, BULLET_RADIUS, wall)) continue;
-      if (wall.type === "brick") wall.alive = false;
+      if (wall.type === "brick") {
+        wall.alive = false;
+        markMapDirty(room);
+      }
       consumed = true;
       break;
     }
@@ -909,6 +941,7 @@ function startCountdownIfReady(room) {
   resetRoomForMatch(room);
   io.to(room.id).emit("countdown", { endsAt: room.countdownEndsAt });
   emitRoomState(room);
+  emitMapState(room);
   return "";
 }
 
@@ -929,10 +962,30 @@ function publicGameState(room) {
     remainingSeconds,
     redScore: room.redScore,
     blueScore: room.blueScore,
-    players: [...room.players].map((id) => players.get(id)).filter((player) => player && player.online).map(publicPlayer),
-    bullets: room.bullets,
-    walls: room.mapState.walls,
-    zones: room.mapState.zones,
+    players: [...room.players]
+      .map((id) => players.get(id))
+      .filter((player) => player && player.online)
+      .map((player) => ({
+        id: player.id,
+        nickname: player.nickname,
+        shortName: shortName(player.nickname),
+        team: player.team,
+        x: Math.round(player.x * 10) / 10,
+        y: Math.round(player.y * 10) / 10,
+        angle: Math.round(player.angle * 1000) / 1000,
+        hp: player.hp,
+        alive: player.alive,
+        invincible: now < player.invincibleUntil,
+        kills: player.kills,
+        deaths: player.deaths,
+      })),
+    bullets: room.bullets.map((bullet) => ({
+      id: bullet.id,
+      team: bullet.team,
+      x: Math.round(bullet.x * 10) / 10,
+      y: Math.round(bullet.y * 10) / 10,
+    })),
+    mapVersion: room.mapVersion,
     countdownEndsAt: room.countdownEndsAt,
     endedInfo: room.endedInfo,
   };
@@ -986,9 +1039,13 @@ setInterval(() => {
   }
   cleanupDisconnected(now);
 
-  for (const room of rooms.values()) {
-    if (room.status === ROOM_STATUS.PLAYING || room.status === ROOM_STATUS.COUNTDOWN) {
-      io.to(room.id).emit("gameState", publicGameState(room));
+  if (now - lastStateBroadcastAt >= STATE_BROADCAST_INTERVAL_MS) {
+    lastStateBroadcastAt = now;
+    for (const room of rooms.values()) {
+      if (room.status === ROOM_STATUS.PLAYING || room.status === ROOM_STATUS.COUNTDOWN) {
+        if (room.mapDirty) emitMapState(room);
+        io.to(room.id).emit("gameState", publicGameState(room));
+      }
     }
   }
 }, 1000 / TICK_RATE);
@@ -1145,6 +1202,7 @@ io.on("connection", (socket) => {
     room.endedInfo = null;
     room.bullets = [];
     room.mapState = createMapDefinition(room.map);
+    markMapDirty(room);
     room.countdownEndsAt = null;
     for (const playerId of [...room.players]) {
       const roomPlayer = players.get(playerId);

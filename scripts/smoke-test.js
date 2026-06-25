@@ -159,12 +159,13 @@ async function main() {
       red.emit("chooseTeam", "red");
       blue.emit("chooseTeam", "blue");
       await wait(100);
+      const mapStatePromise = once(red, "mapState");
       const countdownPromise = once(red, "countdown");
       const started = await emitAck(red, "startGame");
       if (!started || !started.ok) throw new Error(`${map} 地图开始失败`);
+      const mapState = await mapStatePromise;
       await countdownPromise;
       await once(red, "gameStarted", 5000);
-      const mapState = await once(red, "gameState", 3000);
       if (!mapState.zones.some((zone) => zone.type === zoneType)) {
         throw new Error(`${map} 地图缺少 ${zoneType} 特殊地形`);
       }
@@ -270,10 +271,12 @@ async function main() {
     blue.emit("chooseTeam", "blue");
     await wait(250);
 
+    const finalMapStatePromise = once(red, "mapState");
     const finalCountdownPromise = once(red, "countdown");
     const start = await emitAck(red, "startGame");
     if (!start || !start.ok) throw new Error("开始游戏失败");
 
+    const finalMapState = await finalMapStatePromise;
     const countdown = await finalCountdownPromise;
     if (!countdown.endsAt) throw new Error("没有收到倒计时结束时间");
 
@@ -286,8 +289,8 @@ async function main() {
     const state = await once(red, "gameState", 3000);
     if (state.status !== "playing") throw new Error(`游戏状态错误: ${state.status}`);
     if (!state.players || state.players.length !== 2) throw new Error("游戏玩家数量错误");
-    if (!Array.isArray(state.walls) || !state.walls.length) throw new Error("地图墙体未下发");
-    if (!Array.isArray(state.zones) || !state.zones.length) throw new Error("特殊地形未下发");
+    if (!Array.isArray(finalMapState.walls) || !finalMapState.walls.length) throw new Error("地图墙体未下发");
+    if (!Array.isArray(finalMapState.zones) || !finalMapState.zones.length) throw new Error("特殊地形未下发");
 
     const latePlayer = await connectPlayer("迟到玩家");
     sockets.push(latePlayer);

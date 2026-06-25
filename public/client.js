@@ -8,6 +8,7 @@
     latestGameState: null,
     scoreboardVisible: false,
     forceRoomView: false,
+    hudCache: {},
   };
 
   const views = {
@@ -48,6 +49,7 @@
     hudHealth: document.getElementById("hudHealth"),
     hudTeam: document.getElementById("hudTeam"),
     hudMap: document.getElementById("hudMap"),
+    hudFps: document.getElementById("hudFps"),
     countdownOverlay: document.getElementById("countdownOverlay"),
     scoreboard: document.getElementById("scoreboard"),
     resultTitle: document.getElementById("resultTitle"),
@@ -232,16 +234,19 @@
     window.TankGame.start(socket, state.playerId);
     window.TankGame.updateState(gameState);
 
-    els.hudRedScore.textContent = gameState.redScore;
-    els.hudBlueScore.textContent = gameState.blueScore;
-    els.hudObjective.textContent =
+    setTextIfChanged(els.hudRedScore, "redScore", gameState.redScore);
+    setTextIfChanged(els.hudBlueScore, "blueScore", gameState.blueScore);
+    setTextIfChanged(
+      els.hudObjective,
+      "objective",
       gameState.mode === "time"
         ? `剩余 ${formatTime(gameState.remainingSeconds || gameState.timeLimit)}`
-        : `目标分数 ${gameState.scoreLimit}`;
+        : `目标分数 ${gameState.scoreLimit}`,
+    );
     const player = gameState.players.find((item) => item.id === state.playerId);
-    els.hudHealth.textContent = `生命 ${player && player.alive ? player.hp : 0}`;
-    els.hudTeam.textContent = `队伍 ${player && player.team ? TEAM_NAMES[player.team] : "-"}`;
-    els.hudMap.textContent = `地图 ${gameState.mapName || MAP_NAMES[gameState.map] || "-"}`;
+    setTextIfChanged(els.hudHealth, "health", `生命 ${player && player.alive ? player.hp : 0}`);
+    setTextIfChanged(els.hudTeam, "team", `队伍 ${player && player.team ? TEAM_NAMES[player.team] : "-"}`);
+    setTextIfChanged(els.hudMap, "map", `地图 ${gameState.mapName || MAP_NAMES[gameState.map] || "-"}`);
 
     if (gameState.status === "countdown" && gameState.countdownEndsAt) {
       const seconds = Math.max(1, Math.ceil((gameState.countdownEndsAt - Date.now()) / 1000));
@@ -308,6 +313,13 @@
     return `${min}:${String(sec).padStart(2, "0")}`;
   }
 
+  function setTextIfChanged(element, key, value) {
+    const text = String(value);
+    if (state.hudCache[key] === text) return;
+    state.hudCache[key] = text;
+    element.textContent = text;
+  }
+
   function escapeHtml(value) {
     return String(value)
       .replaceAll("&", "&amp;")
@@ -368,6 +380,12 @@
     }
   }
 
+  setInterval(() => {
+    const stats = window.TankGame.getPerformanceStats ? window.TankGame.getPerformanceStats() : null;
+    if (!stats || !stats.sampleCount) return;
+    setTextIfChanged(els.hudFps, "fps", `FPS ${Math.round(stats.avgFps)}`);
+  }, 250);
+
   socket.on("connect", () => {
     if (state.nickname) {
       setNickname(state.nickname);
@@ -390,6 +408,9 @@
   socket.on("lobbyState", renderRoomList);
   socket.on("roomState", renderRoom);
   socket.on("gameState", renderGameState);
+  socket.on("mapState", (mapState) => {
+    window.TankGame.updateMapState(mapState);
+  });
   socket.on("countdown", (payload) => {
     els.countdownOverlay.textContent = Math.max(1, Math.ceil((payload.endsAt - Date.now()) / 1000));
     els.countdownOverlay.classList.remove("hidden");
