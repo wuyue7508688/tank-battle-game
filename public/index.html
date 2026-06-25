@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>局域网坦克大战</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <section id="nicknameView" class="view view-auth">
+        <div class="auth-panel">
+          <p class="eyebrow">LAN TANK BATTLE</p>
+          <h1>局域网坦克大战</h1>
+          <p class="intro">输入昵称，进入大厅，和同事分红蓝队开战。</p>
+          <form id="nicknameForm" class="stack">
+            <label for="nicknameInput">昵称</label>
+            <div class="inline-form">
+              <input id="nicknameInput" name="nickname" maxlength="12" autocomplete="nickname" placeholder="1 到 12 个字符" />
+              <button type="submit">进入大厅</button>
+            </div>
+          </form>
+          <div class="controls-note">
+            <span>WASD / 方向键移动</span>
+            <span>鼠标瞄准</span>
+            <span>左键开火</span>
+            <span>Tab 记分板</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="lobbyView" class="view hidden">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">LOBBY</p>
+            <h2>大厅</h2>
+          </div>
+          <div class="player-chip">
+            <span id="lobbyNickname">-</span>
+          </div>
+        </header>
+
+        <main class="lobby-layout">
+          <section class="panel create-panel">
+            <h3>创建房间</h3>
+            <form id="createRoomForm" class="stack">
+              <label for="createMap">地图</label>
+              <select id="createMap">
+                <option value="snow">冰雪</option>
+                <option value="desert">沙漠</option>
+                <option value="jungle">雨林</option>
+              </select>
+
+              <label for="createMode">胜利模式</label>
+              <select id="createMode">
+                <option value="score">分数制</option>
+                <option value="time">时间制</option>
+              </select>
+
+              <label for="createScoreLimit">目标分数</label>
+              <select id="createScoreLimit">
+                <option value="10">10 分</option>
+                <option value="20">20 分</option>
+                <option value="30">30 分</option>
+              </select>
+
+              <label for="createTimeLimit">时间限制</label>
+              <select id="createTimeLimit">
+                <option value="180">3 分钟</option>
+                <option value="300">5 分钟</option>
+                <option value="600">10 分钟</option>
+              </select>
+
+              <button type="submit">创建房间</button>
+            </form>
+          </section>
+
+          <section class="panel rooms-panel">
+            <div class="panel-head">
+              <h3>房间列表</h3>
+              <form id="joinCodeForm" class="join-code">
+                <input id="roomCodeInput" maxlength="4" placeholder="房间码" />
+                <button type="submit">加入</button>
+              </form>
+            </div>
+            <div id="roomList" class="room-list empty-state">暂无房间</div>
+          </section>
+        </main>
+      </section>
+
+      <section id="roomView" class="view hidden">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">ROOM <span id="roomCodeLabel">----</span></p>
+            <h2 id="roomTitle">准备作战</h2>
+          </div>
+          <div class="top-actions">
+            <button id="leaveRoomButton" type="button" class="secondary">离开房间</button>
+          </div>
+        </header>
+
+        <main class="room-layout">
+          <section class="panel room-config">
+            <h3>房间配置</h3>
+            <div class="config-grid">
+              <label>
+                地图
+                <select id="roomMapSelect">
+                  <option value="snow">冰雪</option>
+                  <option value="desert">沙漠</option>
+                  <option value="jungle">雨林</option>
+                </select>
+              </label>
+              <label>
+                模式
+                <select id="roomModeSelect">
+                  <option value="score">分数制</option>
+                  <option value="time">时间制</option>
+                </select>
+              </label>
+              <label>
+                目标分数
+                <select id="roomScoreSelect">
+                  <option value="10">10 分</option>
+                  <option value="20">20 分</option>
+                  <option value="30">30 分</option>
+                </select>
+              </label>
+              <label>
+                时间限制
+                <select id="roomTimeSelect">
+                  <option value="180">3 分钟</option>
+                  <option value="300">5 分钟</option>
+                  <option value="600">10 分钟</option>
+                </select>
+              </label>
+            </div>
+            <button id="startGameButton" type="button">开始游戏</button>
+            <div class="controls-note compact">
+              <span>WASD / 方向键移动</span>
+              <span>鼠标瞄准</span>
+              <span>左键开火</span>
+              <span>Tab 记分板</span>
+            </div>
+          </section>
+
+          <section class="teams">
+            <article class="panel team-card red-team">
+              <div class="team-head">
+                <h3>红队</h3>
+                <button id="joinRedButton" type="button">加入红队</button>
+              </div>
+              <div id="redPlayers" class="player-list"></div>
+            </article>
+            <article class="panel team-card blue-team">
+              <div class="team-head">
+                <h3>蓝队</h3>
+                <button id="joinBlueButton" type="button">加入蓝队</button>
+              </div>
+              <div id="bluePlayers" class="player-list"></div>
+            </article>
+          </section>
+        </main>
+      </section>
+
+      <section id="gameView" class="view game-view hidden">
+        <div id="gameHud" class="game-hud">
+          <div class="hud-block score"><span id="hudRedScore">0</span><b>:</b><span id="hudBlueScore">0</span></div>
+          <div class="hud-block" id="hudObjective">目标分数 10</div>
+          <div class="hud-block" id="hudHealth">生命 3</div>
+          <div class="hud-block" id="hudTeam">队伍 -</div>
+          <div class="hud-block" id="hudMap">地图 -</div>
+        </div>
+        <div id="gameCanvasWrap"></div>
+        <div id="countdownOverlay" class="countdown hidden">3</div>
+        <div id="scoreboard" class="scoreboard hidden"></div>
+      </section>
+
+      <section id="resultsView" class="view hidden">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">RESULT</p>
+            <h2 id="resultTitle">结算</h2>
+          </div>
+          <div class="top-actions">
+            <button id="restartButton" type="button">再来一局</button>
+            <button id="backToRoomButton" type="button" class="secondary">返回房间</button>
+          </div>
+        </header>
+        <main class="results-layout">
+          <section class="panel">
+            <h3 id="resultScore">0 : 0</h3>
+            <div id="resultPlayers" class="result-table"></div>
+          </section>
+        </main>
+      </section>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/phaser/phaser.min.js"></script>
+    <script src="/game.js"></script>
+    <script src="/client.js"></script>
+  </body>
+</html>
