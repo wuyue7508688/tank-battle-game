@@ -122,24 +122,18 @@ async function main() {
     });
     await host.keyboard.down("D");
     await host.mouse.move(900, 450);
-    await host.waitForTimeout(150);
-    const afterInput = await host.evaluate(() => {
-      const snapshot = window.TankGame.getDebugSnapshot();
-      return snapshot.players.find((player) => player.id === snapshot.playerId);
-    });
-    const instantMoveDistance = Math.hypot(afterInput.x - beforeInput.x, afterInput.y - beforeInput.y);
-    if (instantMoveDistance < 8) {
-      throw new Error(`输入响应太慢: 150ms 内只移动 ${instantMoveDistance.toFixed(2)}px`);
-    }
-
     const movementSamples = [];
-    for (let i = 0; i < 8; i += 1) {
+    for (let i = 0; i < 10; i += 1) {
       await host.waitForTimeout(80);
       movementSamples.push(await host.evaluate(() => {
         const snapshot = window.TankGame.getDebugSnapshot();
         const self = snapshot.players.find((player) => player.id === snapshot.playerId);
         return { x: self.x, y: self.y };
       }));
+    }
+    const firstMoveDistance = Math.hypot(movementSamples[1].x - beforeInput.x, movementSamples[1].y - beforeInput.y);
+    if (firstMoveDistance < 10) {
+      throw new Error(`输入响应太慢: 160ms 内只移动 ${firstMoveDistance.toFixed(2)}px`);
     }
     let backwardSteps = 0;
     for (let i = 1; i < movementSamples.length; i += 1) {

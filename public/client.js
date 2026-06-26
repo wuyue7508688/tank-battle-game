@@ -1,5 +1,7 @@
 (function () {
-  const socket = io();
+  const socket = io({
+    transports: ["websocket"],
+  });
 
   const state = {
     playerId: sessionStorage.getItem("tankPlayerId") || null,

@@ -3,32 +3,14 @@
   const WORLD_HEIGHT = 720;
   const TANK_SIZE = 48;
   const TANK_RADIUS = 24;
-  const TANK_SPEED = 180;
   const MAX_FRAME_DELTA = 0.05;
-  const SELF_IDLE_CORRECTION = 0.25;
-  const SELF_MOVING_CORRECTION = 0.08;
-  const SELF_MOVING_CORRECTION_DISTANCE = 36;
-  const SELF_SNAP_DISTANCE = 96;
-  const REMOTE_INTERPOLATION = 14;
+  const POSITION_INTERPOLATION = 24;
+  const SNAP_DISTANCE = 96;
 
   const TEAM_COLORS = {
     red: 0xe24b4b,
     blue: 0x3d8cff,
   };
-
-  function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
-  }
-
-  function rectsOverlap(a, b) {
-    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
-  }
-
-  function normalizeVector(x, y) {
-    const length = Math.hypot(x, y);
-    if (!length) return { x: 0, y: 0 };
-    return { x: x / length, y: y / length };
-  }
 
   const TEAM_DARK = {
     red: 0x7b2020,
@@ -163,8 +145,7 @@
       this.updateFps();
       this.sendInput(false);
       const dt = Math.min(delta / 1000, MAX_FRAME_DELTA);
-      this.predictLocalPlayer(dt);
-      this.interpolateRemotePlayers(dt);
+      this.interpolatePlayers(dt);
       this.renderState();
     }
 
@@ -196,25 +177,13 @@
 
         const distance = Math.hypot(player.x - render.x, player.y - render.y);
         const isSelf = player.id === this.playerId;
-        const movingSelf = isSelf && (this.hasMovementInput() || Math.hypot(render.velocityX, render.velocityY) > 8);
-        const shouldSnap = !player.alive || !wasAlive || distance > SELF_SNAP_DISTANCE;
-        if (shouldSnap) {
+        const shouldSnap = !player.alive || !wasAlive || distance > SNAP_DISTANCE;
+        if (isSelf || shouldSnap) {
           render.x = player.x;
           render.y = player.y;
           render.angle = player.angle;
           render.velocityX = 0;
           render.velocityY = 0;
-        } else if (isSelf) {
-          if (movingSelf) {
-            if (distance > SELF_MOVING_CORRECTION_DISTANCE) {
-              render.x += (player.x - render.x) * SELF_MOVING_CORRECTION;
-              render.y += (player.y - render.y) * SELF_MOVING_CORRECTION;
-            }
-          } else {
-            render.x += (player.x - render.x) * SELF_IDLE_CORRECTION;
-            render.y += (player.y - render.y) * SELF_IDLE_CORRECTION;
-            render.angle = player.angle;
-          }
         }
       }
 
@@ -223,79 +192,10 @@
       }
     }
 
-    hasMovementInput() {
-      return Boolean(this.inputPayload.up || this.inputPayload.down || this.inputPayload.left || this.inputPayload.right);
-    }
-
-    predictLocalPlayer(dt) {
-      if (!this.latestState || this.latestState.status !== "playing") return;
-      const player = this.latestState.players.find((item) => item.id === this.playerId);
-      if (!player || !player.alive || !player.team) return;
-
-      let render = this.renderPlayers.get(player.id);
-      if (!render) {
-        render = {
-          x: player.x,
-          y: player.y,
-          angle: player.angle,
-          targetX: player.x,
-          targetY: player.y,
-          targetAngle: player.angle,
-          velocityX: 0,
-          velocityY: 0,
-          alive: player.alive,
-        };
-        this.renderPlayers.set(player.id, render);
-      }
-
-      let mx = 0;
-      let my = 0;
-      if (this.inputPayload.left) mx -= 1;
-      if (this.inputPayload.right) mx += 1;
-      if (this.inputPayload.up) my -= 1;
-      if (this.inputPayload.down) my += 1;
-
-      render.angle = Number.isFinite(this.inputPayload.angle) ? this.inputPayload.angle : render.angle;
-      const direction = normalizeVector(mx, my);
-      const onIce = this.latestState.map === "snow" && this.isInLocalZone(render.x, render.y, "ice");
-      const onQuicksand = this.latestState.map === "desert" && this.isInLocalZone(render.x, render.y, "quicksand");
-      const speed = TANK_SPEED * (onQuicksand ? 0.7 : 1);
-
-      if (direction.x || direction.y) {
-        render.velocityX = direction.x * speed;
-        render.velocityY = direction.y * speed;
-      } else if (onIce) {
-        render.velocityX *= 0.94;
-        render.velocityY *= 0.94;
-        if (Math.hypot(render.velocityX, render.velocityY) < 8) {
-          render.velocityX = 0;
-          render.velocityY = 0;
-        }
-      } else {
-        render.velocityX = 0;
-        render.velocityY = 0;
-      }
-
-      const nextX = clamp(render.x + render.velocityX * dt, TANK_RADIUS, WORLD_WIDTH - TANK_RADIUS);
-      const nextY = clamp(render.y + render.velocityY * dt, TANK_RADIUS, WORLD_HEIGHT - TANK_RADIUS);
-
-      if (!this.collidesWithLocalWall(nextX, render.y)) {
-        render.x = nextX;
-      } else {
-        render.velocityX = 0;
-      }
-
-      if (!this.collidesWithLocalWall(render.x, nextY)) {
-        render.y = nextY;
-      } else {
-        render.velocityY = 0;
-      }
-    }
-
-    interpolateRemotePlayers(dt) {
-      const blend = Math.min(1, dt * REMOTE_INTERPOLATION);
+    interpolatePlayers(dt) {
+      const blend = Math.min(1, dt * POSITION_INTERPOLATION);
       for (const [id, render] of this.renderPlayers) {
-        if (id === this.playerId || !render.alive) continue;
+        if (!render.alive || id === this.playerId) continue;
         const distance = Math.hypot(render.targetX - render.x, render.targetY - render.y);
         if (distance > TANK_SIZE * 3) {
           render.x = render.targetX;
@@ -306,18 +206,6 @@
         }
         render.angle = render.targetAngle;
       }
-    }
-
-    collidesWithLocalWall(x, y) {
-      if (!this.latestMapState) return false;
-      const rect = { x: x - TANK_RADIUS, y: y - TANK_RADIUS, w: TANK_SIZE, h: TANK_SIZE };
-      return this.latestMapState.walls.some((wall) => wall.alive && rectsOverlap(rect, wall));
-    }
-
-    isInLocalZone(x, y, type) {
-      if (!this.latestMapState) return false;
-      const rect = { x: x - TANK_RADIUS, y: y - TANK_RADIUS, w: TANK_SIZE, h: TANK_SIZE };
-      return this.latestMapState.zones.some((zone) => zone.type === type && rectsOverlap(rect, zone));
     }
 
     clearSceneObjects() {
