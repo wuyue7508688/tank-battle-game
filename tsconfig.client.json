@@ -2,8 +2,8 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "None",
-    "strict": false,
-    "noImplicitAny": false,
+    "strict": true,
+    "noImplicitAny": true,
     "checkJs": false,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,

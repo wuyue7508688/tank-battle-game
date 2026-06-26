@@ -1,10 +1,27 @@
-// @ts-nocheck
 (function () {
   const socket = io({
     transports: ["websocket"],
   });
 
-  const state = {
+  type ViewName = "nickname" | "lobby" | "room" | "game" | "results";
+
+  interface ClientState {
+    playerId: string | null;
+    nickname: string;
+    currentRoom: PublicRoom | null;
+    latestGameState: PublicGameState | null;
+    scoreboardVisible: boolean;
+    forceRoomView: boolean;
+    hudCache: Record<string, string>;
+  }
+
+  function element<T extends HTMLElement>(id: string): T {
+    const found = document.getElementById(id);
+    if (!found) throw new Error(`Missing element: ${id}`);
+    return found as T;
+  }
+
+  const state: ClientState = {
     playerId: sessionStorage.getItem("tankPlayerId") || null,
     nickname: sessionStorage.getItem("tankNickname") || "",
     currentRoom: null,
@@ -14,98 +31,100 @@
     hudCache: {},
   };
 
-  const views = {
-    nickname: document.getElementById("nicknameView"),
-    lobby: document.getElementById("lobbyView"),
-    room: document.getElementById("roomView"),
-    game: document.getElementById("gameView"),
-    results: document.getElementById("resultsView"),
+  const views: Record<ViewName, HTMLElement> = {
+    nickname: element("nicknameView"),
+    lobby: element("lobbyView"),
+    room: element("roomView"),
+    game: element("gameView"),
+    results: element("resultsView"),
   };
 
   const els = {
-    nicknameForm: document.getElementById("nicknameForm"),
-    nicknameInput: document.getElementById("nicknameInput"),
-    lobbyNickname: document.getElementById("lobbyNickname"),
-    createRoomForm: document.getElementById("createRoomForm"),
-    createMap: document.getElementById("createMap"),
-    createMode: document.getElementById("createMode"),
-    createScoreLimit: document.getElementById("createScoreLimit"),
-    createTimeLimit: document.getElementById("createTimeLimit"),
-    joinCodeForm: document.getElementById("joinCodeForm"),
-    roomCodeInput: document.getElementById("roomCodeInput"),
-    roomList: document.getElementById("roomList"),
-    roomCodeLabel: document.getElementById("roomCodeLabel"),
-    roomTitle: document.getElementById("roomTitle"),
-    leaveRoomButton: document.getElementById("leaveRoomButton"),
-    roomMapSelect: document.getElementById("roomMapSelect"),
-    roomModeSelect: document.getElementById("roomModeSelect"),
-    roomScoreSelect: document.getElementById("roomScoreSelect"),
-    roomTimeSelect: document.getElementById("roomTimeSelect"),
-    startGameButton: document.getElementById("startGameButton"),
-    joinRedButton: document.getElementById("joinRedButton"),
-    joinBlueButton: document.getElementById("joinBlueButton"),
-    redPlayers: document.getElementById("redPlayers"),
-    bluePlayers: document.getElementById("bluePlayers"),
-    hudRedScore: document.getElementById("hudRedScore"),
-    hudBlueScore: document.getElementById("hudBlueScore"),
-    hudObjective: document.getElementById("hudObjective"),
-    hudHealth: document.getElementById("hudHealth"),
-    hudTeam: document.getElementById("hudTeam"),
-    hudMap: document.getElementById("hudMap"),
-    hudFps: document.getElementById("hudFps"),
-    countdownOverlay: document.getElementById("countdownOverlay"),
-    scoreboard: document.getElementById("scoreboard"),
-    resultTitle: document.getElementById("resultTitle"),
-    resultScore: document.getElementById("resultScore"),
-    resultPlayers: document.getElementById("resultPlayers"),
-    restartButton: document.getElementById("restartButton"),
-    backToRoomButton: document.getElementById("backToRoomButton"),
-    toast: document.getElementById("toast"),
+    nicknameForm: element<HTMLFormElement>("nicknameForm"),
+    nicknameInput: element<HTMLInputElement>("nicknameInput"),
+    lobbyNickname: element<HTMLElement>("lobbyNickname"),
+    createRoomForm: element<HTMLFormElement>("createRoomForm"),
+    createMap: element<HTMLSelectElement>("createMap"),
+    createMode: element<HTMLSelectElement>("createMode"),
+    createScoreLimit: element<HTMLSelectElement>("createScoreLimit"),
+    createTimeLimit: element<HTMLSelectElement>("createTimeLimit"),
+    joinCodeForm: element<HTMLFormElement>("joinCodeForm"),
+    roomCodeInput: element<HTMLInputElement>("roomCodeInput"),
+    roomList: element<HTMLElement>("roomList"),
+    roomCodeLabel: element<HTMLElement>("roomCodeLabel"),
+    roomTitle: element<HTMLElement>("roomTitle"),
+    leaveRoomButton: element<HTMLButtonElement>("leaveRoomButton"),
+    roomMapSelect: element<HTMLSelectElement>("roomMapSelect"),
+    roomModeSelect: element<HTMLSelectElement>("roomModeSelect"),
+    roomScoreSelect: element<HTMLSelectElement>("roomScoreSelect"),
+    roomTimeSelect: element<HTMLSelectElement>("roomTimeSelect"),
+    startGameButton: element<HTMLButtonElement>("startGameButton"),
+    joinRedButton: element<HTMLButtonElement>("joinRedButton"),
+    joinBlueButton: element<HTMLButtonElement>("joinBlueButton"),
+    redPlayers: element<HTMLElement>("redPlayers"),
+    bluePlayers: element<HTMLElement>("bluePlayers"),
+    hudRedScore: element<HTMLElement>("hudRedScore"),
+    hudBlueScore: element<HTMLElement>("hudBlueScore"),
+    hudObjective: element<HTMLElement>("hudObjective"),
+    hudHealth: element<HTMLElement>("hudHealth"),
+    hudTeam: element<HTMLElement>("hudTeam"),
+    hudMap: element<HTMLElement>("hudMap"),
+    hudFps: element<HTMLElement>("hudFps"),
+    countdownOverlay: element<HTMLElement>("countdownOverlay"),
+    scoreboard: element<HTMLElement>("scoreboard"),
+    resultTitle: element<HTMLElement>("resultTitle"),
+    resultScore: element<HTMLElement>("resultScore"),
+    resultPlayers: element<HTMLElement>("resultPlayers"),
+    restartButton: element<HTMLButtonElement>("restartButton"),
+    backToRoomButton: element<HTMLButtonElement>("backToRoomButton"),
+    toast: element<HTMLElement>("toast"),
   };
 
-  const MAP_NAMES = {
+  const MAP_NAMES: Record<MapKey, string> = {
     snow: "冰雪",
     desert: "沙漠",
     jungle: "雨林",
   };
 
-  const MODE_NAMES = {
+  const MODE_NAMES: Record<GameMode, string> = {
     score: "分数制",
     time: "时间制",
   };
 
   const { STATUS_NAMES, TEAM_NAMES } = window.TankUiRenderers;
 
-  function showView(name) {
+  function showView(name: ViewName): void {
     for (const [viewName, element] of Object.entries(views)) {
       element.classList.toggle("hidden", viewName !== name);
     }
   }
 
-  function toast(message) {
+  let toastTimer = 0;
+
+  function toast(message: string): void {
     els.toast.textContent = message;
     els.toast.classList.remove("hidden");
-    clearTimeout(toast.timer);
-    toast.timer = setTimeout(() => els.toast.classList.add("hidden"), 2600);
+    clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => els.toast.classList.add("hidden"), 2600);
   }
 
-  function currentPlayer(room = state.currentRoom) {
+  function currentPlayer(room: PublicRoom | null = state.currentRoom): PublicPlayer | null {
     if (!room) return null;
     return room.players.find((player) => player.id === state.playerId) || null;
   }
 
-  function isHost(room = state.currentRoom) {
-    return room && room.hostId === state.playerId;
+  function isHost(room: PublicRoom | null = state.currentRoom): boolean {
+    return Boolean(room && room.hostId === state.playerId);
   }
 
-  function setNickname(nickname) {
+  function setNickname(nickname: string): void {
     const trimmed = nickname.trim();
     if (!trimmed) {
       toast("昵称不能为空。");
       return;
     }
-    socket.emit("setNickname", { nickname: trimmed, previousPlayerId: state.playerId }, (response) => {
-      if (!response || !response.ok) return;
+    socket.emit("setNickname", { nickname: trimmed, previousPlayerId: state.playerId }, (response: AckResponse) => {
+      if (!response || !response.ok || !response.playerId || !response.nickname) return;
       state.playerId = response.playerId;
       state.nickname = response.nickname;
       sessionStorage.setItem("tankNickname", response.nickname);
@@ -116,7 +135,7 @@
     });
   }
 
-  function createRoom() {
+  function createRoom(): void {
     socket.emit("createRoom", {
       map: els.createMap.value,
       mode: els.createMode.value,
@@ -125,7 +144,7 @@
     });
   }
 
-  function renderRoomList(rooms) {
+  function renderRoomList(rooms: LobbyRoom[]): void {
     if (!rooms.length) {
       els.roomList.textContent = "暂无房间";
       els.roomList.className = "room-list empty-state";
@@ -136,7 +155,7 @@
     els.roomList.innerHTML = window.TankUiRenderers.renderRoomListHtml(rooms);
   }
 
-  function renderRoom(room) {
+  function renderRoom(room: PublicRoom): void {
     state.currentRoom = room;
     els.roomCodeLabel.textContent = room.code;
     els.roomTitle.textContent = `${room.mapName} / ${room.modeName} / ${STATUS_NAMES[room.status]}`;
@@ -181,11 +200,11 @@
     }
   }
 
-  function renderTeamList(team, element, players) {
+  function renderTeamList(team: Team, element: HTMLElement, players: PublicPlayer[]): void {
     element.innerHTML = window.TankUiRenderers.renderTeamListHtml(team, players);
   }
 
-  function updateRoomConfig() {
+  function updateRoomConfig(): void {
     if (!state.currentRoom || !isHost()) return;
     socket.emit("updateRoomConfig", {
       map: els.roomMapSelect.value,
@@ -195,7 +214,7 @@
     });
   }
 
-  function renderGameState(gameState) {
+  function renderGameState(gameState: PublicGameState): void {
     state.latestGameState = gameState;
     window.TankGame.start(socket, state.playerId);
     window.TankGame.updateState(gameState);
@@ -216,7 +235,7 @@
 
     if (gameState.status === "countdown" && gameState.countdownEndsAt) {
       const seconds = Math.max(1, Math.ceil((gameState.countdownEndsAt - Date.now()) / 1000));
-      els.countdownOverlay.textContent = seconds;
+      els.countdownOverlay.textContent = String(seconds);
       els.countdownOverlay.classList.remove("hidden");
     } else {
       els.countdownOverlay.classList.add("hidden");
@@ -225,7 +244,7 @@
     renderScoreboard();
   }
 
-  function renderScoreboard() {
+  function renderScoreboard(): void {
     const gameState = state.latestGameState;
     if (!state.scoreboardVisible || !gameState) {
       els.scoreboard.classList.add("hidden");
@@ -235,7 +254,7 @@
     els.scoreboard.innerHTML = window.TankUiRenderers.renderScoreboardHtml(gameState.players);
   }
 
-  function renderResults(info) {
+  function renderResults(info: EndedInfo | null): void {
     if (!info) return;
     const winnerText = info.winner ? `${TEAM_NAMES[info.winner]}获胜` : "平局";
     els.resultTitle.textContent = winnerText;
@@ -244,21 +263,21 @@
     els.resultPlayers.innerHTML = window.TankUiRenderers.renderResultsHtml(players);
   }
 
-  function formatTime(seconds) {
+  function formatTime(seconds: number | null): string {
     const value = Math.max(0, Number(seconds) || 0);
     const min = Math.floor(value / 60);
     const sec = Math.floor(value % 60);
     return `${min}:${String(sec).padStart(2, "0")}`;
   }
 
-  function setTextIfChanged(element, key, value) {
+  function setTextIfChanged(element: HTMLElement, key: string, value: unknown): void {
     const text = String(value);
     if (state.hudCache[key] === text) return;
     state.hudCache[key] = text;
     element.textContent = text;
   }
 
-  function initEvents() {
+  function initEvents(): void {
     els.nicknameInput.value = state.nickname;
     if (state.nickname) setTimeout(() => els.nicknameInput.select(), 0);
 
@@ -278,7 +297,8 @@
     });
 
     els.roomList.addEventListener("click", (event) => {
-      const button = event.target.closest("button[data-room-id]");
+      const target = event.target instanceof Element ? event.target : null;
+      const button = target?.closest<HTMLButtonElement>("button[data-room-id]");
       if (!button) return;
       socket.emit("joinRoom", button.dataset.roomId);
     });
@@ -325,7 +345,7 @@
     toast("连接断开，正在重连。");
   });
 
-  socket.on("nicknameSet", (payload) => {
+  socket.on("nicknameSet", (payload: NicknameSetPayload) => {
     state.playerId = payload.playerId;
     state.nickname = payload.nickname;
     sessionStorage.setItem("tankNickname", payload.nickname);
@@ -337,11 +357,11 @@
   socket.on("lobbyState", renderRoomList);
   socket.on("roomState", renderRoom);
   socket.on("gameState", renderGameState);
-  socket.on("mapState", (mapState) => {
+  socket.on("mapState", (mapState: PublicMapState) => {
     window.TankGame.updateMapState(mapState);
   });
-  socket.on("countdown", (payload) => {
-    els.countdownOverlay.textContent = Math.max(1, Math.ceil((payload.endsAt - Date.now()) / 1000));
+  socket.on("countdown", (payload: CountdownPayload) => {
+    els.countdownOverlay.textContent = String(Math.max(1, Math.ceil((payload.endsAt - Date.now()) / 1000)));
     els.countdownOverlay.classList.remove("hidden");
     showView("game");
     window.TankGame.start(socket, state.playerId);
@@ -350,14 +370,14 @@
     els.countdownOverlay.classList.add("hidden");
     showView("game");
   });
-  socket.on("gameEnded", (info) => {
+  socket.on("gameEnded", (info: EndedInfo) => {
     renderResults(info);
     showView("results");
   });
   socket.on("errorMessage", toast);
 
   window.TankClient = {
-    setScoreboardVisible(visible) {
+    setScoreboardVisible(visible: boolean): void {
       state.scoreboardVisible = visible;
       renderScoreboard();
     },

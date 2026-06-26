@@ -1,18 +1,17 @@
-// @ts-nocheck
 (function () {
-  const STATUS_NAMES = {
+  const STATUS_NAMES: Record<RoomStatus, string> = {
     waiting: "等待中",
     countdown: "倒计时中",
     playing: "游戏中",
     ended: "已结束",
   };
 
-  const TEAM_NAMES = {
+  const TEAM_NAMES: Record<Team, string> = {
     red: "红队",
     blue: "蓝队",
   };
 
-  function escapeHtml(value) {
+  function escapeHtml(value: unknown): string {
     return String(value)
       .replaceAll("&", "&amp;")
       .replaceAll("<", "&lt;")
@@ -21,7 +20,7 @@
       .replaceAll("'", "&#039;");
   }
 
-  function renderRoomListHtml(rooms) {
+  function renderRoomListHtml(rooms: LobbyRoom[]): string {
     return rooms
       .map((room) => {
         const disabled = room.canJoin ? "" : "disabled";
@@ -40,7 +39,7 @@
       .join("");
   }
 
-  function renderTeamListHtml(team, players) {
+  function renderTeamListHtml(team: Team, players: PublicPlayer[]): string {
     const teamPlayers = players.filter((player) => player.team === team);
     if (!teamPlayers.length) {
       return `<div class="player-row"><span>空位</span><span>0/4</span></div>`;
@@ -55,7 +54,7 @@
       .join("");
   }
 
-  function renderScoreboardHtml(players) {
+  function renderScoreboardHtml(players: PublicPlayer[]): string {
     const sortedPlayers = [...players].sort((a, b) => {
       if (a.team === b.team) return b.kills - a.kills;
       return a.team === "red" ? -1 : 1;
@@ -66,7 +65,7 @@
         .map((player) => `
           <div class="scoreboard-row">
             <span>${escapeHtml(player.nickname)}</span>
-            <span>${TEAM_NAMES[player.team] || "-"}</span>
+            <span>${player.team ? TEAM_NAMES[player.team] : "-"}</span>
             <span>${player.kills}</span>
             <span>${player.deaths}</span>
           </div>
@@ -75,14 +74,14 @@
     `;
   }
 
-  function renderResultsHtml(players) {
+  function renderResultsHtml(players: PublicPlayer[]): string {
     return `
       <div class="result-row header"><span>玩家</span><span>队伍</span><span>击杀</span><span>死亡</span></div>
       ${players
         .map((player) => `
           <div class="result-row">
             <span>${escapeHtml(player.nickname)}</span>
-            <span>${TEAM_NAMES[player.team] || "-"}</span>
+            <span>${player.team ? TEAM_NAMES[player.team] : "-"}</span>
             <span>${player.kills}</span>
             <span>${player.deaths}</span>
           </div>

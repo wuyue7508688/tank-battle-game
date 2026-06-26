@@ -1,5 +1,4 @@
 "use strict";
-// @ts-nocheck
 (function () {
     const TEAM_COLORS = {
         red: 0xe24b4b,

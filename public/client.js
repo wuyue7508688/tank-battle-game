@@ -1,9 +1,14 @@
 "use strict";
-// @ts-nocheck
 (function () {
     const socket = io({
         transports: ["websocket"],
     });
+    function element(id) {
+        const found = document.getElementById(id);
+        if (!found)
+            throw new Error(`Missing element: ${id}`);
+        return found;
+    }
     const state = {
         playerId: sessionStorage.getItem("tankPlayerId") || null,
         nickname: sessionStorage.getItem("tankNickname") || "",
@@ -14,51 +19,51 @@
         hudCache: {},
     };
     const views = {
-        nickname: document.getElementById("nicknameView"),
-        lobby: document.getElementById("lobbyView"),
-        room: document.getElementById("roomView"),
-        game: document.getElementById("gameView"),
-        results: document.getElementById("resultsView"),
+        nickname: element("nicknameView"),
+        lobby: element("lobbyView"),
+        room: element("roomView"),
+        game: element("gameView"),
+        results: element("resultsView"),
     };
     const els = {
-        nicknameForm: document.getElementById("nicknameForm"),
-        nicknameInput: document.getElementById("nicknameInput"),
-        lobbyNickname: document.getElementById("lobbyNickname"),
-        createRoomForm: document.getElementById("createRoomForm"),
-        createMap: document.getElementById("createMap"),
-        createMode: document.getElementById("createMode"),
-        createScoreLimit: document.getElementById("createScoreLimit"),
-        createTimeLimit: document.getElementById("createTimeLimit"),
-        joinCodeForm: document.getElementById("joinCodeForm"),
-        roomCodeInput: document.getElementById("roomCodeInput"),
-        roomList: document.getElementById("roomList"),
-        roomCodeLabel: document.getElementById("roomCodeLabel"),
-        roomTitle: document.getElementById("roomTitle"),
-        leaveRoomButton: document.getElementById("leaveRoomButton"),
-        roomMapSelect: document.getElementById("roomMapSelect"),
-        roomModeSelect: document.getElementById("roomModeSelect"),
-        roomScoreSelect: document.getElementById("roomScoreSelect"),
-        roomTimeSelect: document.getElementById("roomTimeSelect"),
-        startGameButton: document.getElementById("startGameButton"),
-        joinRedButton: document.getElementById("joinRedButton"),
-        joinBlueButton: document.getElementById("joinBlueButton"),
-        redPlayers: document.getElementById("redPlayers"),
-        bluePlayers: document.getElementById("bluePlayers"),
-        hudRedScore: document.getElementById("hudRedScore"),
-        hudBlueScore: document.getElementById("hudBlueScore"),
-        hudObjective: document.getElementById("hudObjective"),
-        hudHealth: document.getElementById("hudHealth"),
-        hudTeam: document.getElementById("hudTeam"),
-        hudMap: document.getElementById("hudMap"),
-        hudFps: document.getElementById("hudFps"),
-        countdownOverlay: document.getElementById("countdownOverlay"),
-        scoreboard: document.getElementById("scoreboard"),
-        resultTitle: document.getElementById("resultTitle"),
-        resultScore: document.getElementById("resultScore"),
-        resultPlayers: document.getElementById("resultPlayers"),
-        restartButton: document.getElementById("restartButton"),
-        backToRoomButton: document.getElementById("backToRoomButton"),
-        toast: document.getElementById("toast"),
+        nicknameForm: element("nicknameForm"),
+        nicknameInput: element("nicknameInput"),
+        lobbyNickname: element("lobbyNickname"),
+        createRoomForm: element("createRoomForm"),
+        createMap: element("createMap"),
+        createMode: element("createMode"),
+        createScoreLimit: element("createScoreLimit"),
+        createTimeLimit: element("createTimeLimit"),
+        joinCodeForm: element("joinCodeForm"),
+        roomCodeInput: element("roomCodeInput"),
+        roomList: element("roomList"),
+        roomCodeLabel: element("roomCodeLabel"),
+        roomTitle: element("roomTitle"),
+        leaveRoomButton: element("leaveRoomButton"),
+        roomMapSelect: element("roomMapSelect"),
+        roomModeSelect: element("roomModeSelect"),
+        roomScoreSelect: element("roomScoreSelect"),
+        roomTimeSelect: element("roomTimeSelect"),
+        startGameButton: element("startGameButton"),
+        joinRedButton: element("joinRedButton"),
+        joinBlueButton: element("joinBlueButton"),
+        redPlayers: element("redPlayers"),
+        bluePlayers: element("bluePlayers"),
+        hudRedScore: element("hudRedScore"),
+        hudBlueScore: element("hudBlueScore"),
+        hudObjective: element("hudObjective"),
+        hudHealth: element("hudHealth"),
+        hudTeam: element("hudTeam"),
+        hudMap: element("hudMap"),
+        hudFps: element("hudFps"),
+        countdownOverlay: element("countdownOverlay"),
+        scoreboard: element("scoreboard"),
+        resultTitle: element("resultTitle"),
+        resultScore: element("resultScore"),
+        resultPlayers: element("resultPlayers"),
+        restartButton: element("restartButton"),
+        backToRoomButton: element("backToRoomButton"),
+        toast: element("toast"),
     };
     const MAP_NAMES = {
         snow: "冰雪",
@@ -75,11 +80,12 @@
             element.classList.toggle("hidden", viewName !== name);
         }
     }
+    let toastTimer = 0;
     function toast(message) {
         els.toast.textContent = message;
         els.toast.classList.remove("hidden");
-        clearTimeout(toast.timer);
-        toast.timer = setTimeout(() => els.toast.classList.add("hidden"), 2600);
+        clearTimeout(toastTimer);
+        toastTimer = window.setTimeout(() => els.toast.classList.add("hidden"), 2600);
     }
     function currentPlayer(room = state.currentRoom) {
         if (!room)
@@ -87,7 +93,7 @@
         return room.players.find((player) => player.id === state.playerId) || null;
     }
     function isHost(room = state.currentRoom) {
-        return room && room.hostId === state.playerId;
+        return Boolean(room && room.hostId === state.playerId);
     }
     function setNickname(nickname) {
         const trimmed = nickname.trim();
@@ -96,7 +102,7 @@
             return;
         }
         socket.emit("setNickname", { nickname: trimmed, previousPlayerId: state.playerId }, (response) => {
-            if (!response || !response.ok)
+            if (!response || !response.ok || !response.playerId || !response.nickname)
                 return;
             state.playerId = response.playerId;
             state.nickname = response.nickname;
@@ -194,7 +200,7 @@
         setTextIfChanged(els.hudMap, "map", `地图 ${gameState.mapName || MAP_NAMES[gameState.map] || "-"}`);
         if (gameState.status === "countdown" && gameState.countdownEndsAt) {
             const seconds = Math.max(1, Math.ceil((gameState.countdownEndsAt - Date.now()) / 1000));
-            els.countdownOverlay.textContent = seconds;
+            els.countdownOverlay.textContent = String(seconds);
             els.countdownOverlay.classList.remove("hidden");
         }
         else {
@@ -250,7 +256,8 @@
             socket.emit("joinRoomByCode", els.roomCodeInput.value.trim().toUpperCase());
         });
         els.roomList.addEventListener("click", (event) => {
-            const button = event.target.closest("button[data-room-id]");
+            const target = event.target instanceof Element ? event.target : null;
+            const button = target?.closest("button[data-room-id]");
             if (!button)
                 return;
             socket.emit("joinRoom", button.dataset.roomId);
@@ -308,7 +315,7 @@
         window.TankGame.updateMapState(mapState);
     });
     socket.on("countdown", (payload) => {
-        els.countdownOverlay.textContent = Math.max(1, Math.ceil((payload.endsAt - Date.now()) / 1000));
+        els.countdownOverlay.textContent = String(Math.max(1, Math.ceil((payload.endsAt - Date.now()) / 1000)));
         els.countdownOverlay.classList.remove("hidden");
         showView("game");
         window.TankGame.start(socket, state.playerId);

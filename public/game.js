@@ -1,5 +1,4 @@
 "use strict";
-// @ts-nocheck
 (function () {
     const WORLD_WIDTH = 1280;
     const WORLD_HEIGHT = 720;
@@ -69,9 +68,9 @@
         setPlayerId(playerId) {
             this.playerId = playerId;
         }
-        update(time, delta = 1000 / 60) {
+        update(_time, delta = 1000 / 60) {
             this.updateFps();
-            this.gameInput.send(false);
+            this.gameInput?.send(false);
             const dt = Math.min(delta / 1000, MAX_FRAME_DELTA);
             this.interpolatePlayers(dt);
             this.renderState();
@@ -199,9 +198,10 @@
             }
             bg.generateTexture(textureKey, WORLD_WIDTH, WORLD_HEIGHT);
             bg.destroy();
-            this.mapImage = this.add.image(0, 0, textureKey);
-            this.mapImage.setOrigin(0, 0);
-            this.mapImage.setDepth(0);
+            const mapImage = this.add.image(0, 0, textureKey);
+            mapImage.setOrigin(0, 0);
+            mapImage.setDepth(0);
+            this.mapImage = mapImage;
             this.mapTextureKey = textureKey;
         }
         drawEmptyMap() {
@@ -217,9 +217,10 @@
                 bg.generateTexture(textureKey, WORLD_WIDTH, WORLD_HEIGHT);
                 bg.destroy();
             }
-            this.mapImage = this.add.image(0, 0, textureKey);
-            this.mapImage.setOrigin(0, 0);
-            this.mapImage.setDepth(0);
+            const mapImage = this.add.image(0, 0, textureKey);
+            mapImage.setOrigin(0, 0);
+            mapImage.setDepth(0);
+            this.mapImage = mapImage;
         }
         renderState() {
             if (!this.latestState)
@@ -228,6 +229,8 @@
             this.renderBullets();
         }
         renderTanks() {
+            if (!this.latestState)
+                return;
             const aliveIds = new Set();
             for (const player of this.latestState.players) {
                 if (!player.alive || !player.team)
@@ -239,9 +242,9 @@
                 const tankTextureKey = window.TankGameRenderers.tankTextureKey(player, this.playerId);
                 const barrelTextureKey = `tank-barrel-${player.team}`;
                 aliveIds.add(player.id);
-                let tank = this.tankSprites.get(player.id);
-                if (!tank) {
-                    tank = this.add.image(x, y, tankTextureKey);
+                const existingTank = this.tankSprites.get(player.id);
+                const tank = existingTank || this.add.image(x, y, tankTextureKey);
+                if (!existingTank) {
                     tank.setDepth(10);
                     this.tankSprites.set(player.id, tank);
                 }
@@ -250,9 +253,9 @@
                 }
                 tank.setPosition(x, y);
                 tank.setAlpha(window.TankGameRenderers.tankAlpha(player, this.latestState, this.latestMapState));
-                let barrel = this.tankBarrels.get(player.id);
-                if (!barrel) {
-                    barrel = this.add.image(x, y, barrelTextureKey);
+                const existingBarrel = this.tankBarrels.get(player.id);
+                const barrel = existingBarrel || this.add.image(x, y, barrelTextureKey);
+                if (!existingBarrel) {
                     barrel.setOrigin(5 / 48, 0.5);
                     barrel.setDepth(11);
                     this.tankBarrels.set(player.id, barrel);
@@ -263,15 +266,15 @@
                 barrel.setPosition(x, y);
                 barrel.setRotation(angle);
                 barrel.setAlpha(tank.alpha);
-                let name = this.nameTexts.get(player.id);
-                if (!name) {
-                    name = this.add.text(0, 0, "", {
-                        fontFamily: "Trebuchet MS, Microsoft YaHei, sans-serif",
-                        fontSize: "13px",
-                        color: "#f1f5ef",
-                        stroke: "#101417",
-                        strokeThickness: 3,
-                    });
+                const existingName = this.nameTexts.get(player.id);
+                const name = existingName || this.add.text(0, 0, "", {
+                    fontFamily: "Trebuchet MS, Microsoft YaHei, sans-serif",
+                    fontSize: "13px",
+                    color: "#f1f5ef",
+                    stroke: "#101417",
+                    strokeThickness: 3,
+                });
+                if (!existingName) {
                     name.setOrigin(0.5, 1);
                     name.setDepth(14);
                     name.lastText = "";
@@ -284,9 +287,9 @@
                 }
                 name.setPosition(x, y - 32);
                 name.setAlpha(tank.alpha);
-                let hp = this.hpBars.get(player.id);
-                if (!hp) {
-                    hp = this.add.graphics();
+                const existingHp = this.hpBars.get(player.id);
+                const hp = existingHp || this.add.graphics();
+                if (!existingHp) {
                     hp.setDepth(13);
                     hp.lastHp = null;
                     this.hpBars.set(player.id, hp);
@@ -396,13 +399,15 @@
             }
         }
         renderBullets() {
+            if (!this.latestState)
+                return;
             const ids = new Set();
             for (const bullet of this.latestState.bullets) {
                 ids.add(bullet.id);
-                let sprite = this.bulletSprites.get(bullet.id);
                 const textureKey = `bullet-${bullet.team}`;
-                if (!sprite) {
-                    sprite = this.add.image(bullet.x, bullet.y, textureKey);
+                const existingSprite = this.bulletSprites.get(bullet.id);
+                const sprite = existingSprite || this.add.image(bullet.x, bullet.y, textureKey);
+                if (!existingSprite) {
                     sprite.setDepth(9);
                     this.bulletSprites.set(bullet.id, sprite);
                 }
@@ -424,10 +429,10 @@
         lastFps: 0,
         start(socket, playerId) {
             if (phaserGame) {
-                scene.setPlayerId(playerId);
+                scene?.setPlayerId(playerId);
                 return;
             }
-            phaserGame = new Phaser.Game({
+            const game = new Phaser.Game({
                 type: Phaser.CANVAS,
                 parent: "gameCanvasWrap",
                 width: WORLD_WIDTH,
@@ -444,13 +449,14 @@
                 },
                 scene: TankBattleScene,
             });
-            phaserGame.events.once("ready", () => {
-                scene = phaserGame.scene.getScene("TankBattleScene");
+            phaserGame = game;
+            game.events.once("ready", () => {
+                scene = game.scene.getScene("TankBattleScene");
                 scene.socket = socket;
                 scene.playerId = playerId;
             });
-            phaserGame.scene.start("TankBattleScene", { socket, playerId });
-            scene = phaserGame.scene.getScene("TankBattleScene");
+            game.scene.start("TankBattleScene", { socket, playerId });
+            scene = game.scene.getScene("TankBattleScene");
         },
         updateState(state) {
             if (scene)

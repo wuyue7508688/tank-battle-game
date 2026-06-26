@@ -1,16 +1,15 @@
-// @ts-nocheck
 (function () {
-  const TEAM_COLORS = {
+  const TEAM_COLORS: TeamColorMap = {
     red: 0xe24b4b,
     blue: 0x3d8cff,
   };
 
-  const TEAM_DARK = {
+  const TEAM_DARK: TeamColorMap = {
     red: 0x7b2020,
     blue: 0x1f4c94,
   };
 
-  const MAP_PALETTES = {
+  const MAP_PALETTES: MapPaletteMap = {
     snow: {
       floor: 0xcfe7ef,
       grid: 0xb6d4de,
@@ -37,11 +36,11 @@
     },
   };
 
-  function tankTextureKey(player, playerId) {
+  function tankTextureKey(player: PublicPlayer, playerId: string | null): string {
     return `tank-body-${player.team}${player.id === playerId ? "-self" : ""}`;
   }
 
-  function tankAlpha(player, latestState, latestMapState) {
+  function tankAlpha(player: PublicPlayer, latestState: PublicGameState, latestMapState: PublicMapState | null): number {
     if (latestState.map === "jungle" && latestMapState) {
       const inGrass = latestMapState.zones.some((zone) => {
         return zone.type === "grass" && player.x >= zone.x && player.x <= zone.x + zone.w && player.y >= zone.y && player.y <= zone.y + zone.h;
@@ -52,7 +51,7 @@
     return 1;
   }
 
-  function wallsVersion(mapState) {
+  function wallsVersion(mapState: PublicMapState): string {
     return mapState.walls.map((wall) => `${wall.id}:${wall.alive ? 1 : 0}`).join("|");
   }
 

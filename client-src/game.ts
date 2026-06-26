@@ -1,4 +1,3 @@
-// @ts-nocheck
 (function () {
   const WORLD_WIDTH = 1280;
   const WORLD_HEIGHT = 720;
@@ -12,6 +11,34 @@
   const { MAP_PALETTES, TEAM_COLORS, TEAM_DARK } = window.TankGameRenderers;
 
   class TankBattleScene extends Phaser.Scene {
+    socket: SocketLike | null;
+    playerId: string | null;
+    latestState: PublicGameState | null;
+    latestMapState: PublicMapState | null;
+    tabKey: unknown;
+    gameInput: GameInputInstance | null;
+    tankSprites: Map<string, PhaserImageLike>;
+    tankBarrels: Map<string, PhaserImageLike>;
+    nameTexts: Map<string, PhaserTextLike>;
+    hpBars: Map<string, PhaserGraphicsLike>;
+    bulletSprites: Map<string, PhaserImageLike>;
+    renderPlayers: Map<string, RenderPlayer>;
+    mapImage: PhaserImageLike | null;
+    mapTextureKey: string;
+    lastMapKey: string;
+    lastMapVersion: number;
+    lastWallsVersion: string;
+    fpsSamples: number[];
+    lastFrameAt: number;
+    lastFpsUpdate: number;
+    currentFps: number;
+    declare add: TankBattleSceneLike["add"];
+    declare cameras: TankBattleSceneLike["cameras"];
+    declare children: TankBattleSceneLike["children"];
+    declare game: TankBattleSceneLike["game"];
+    declare input: TankBattleSceneLike["input"];
+    declare textures: TankBattleSceneLike["textures"];
+
     constructor() {
       super("TankBattleScene");
       this.socket = null;
@@ -37,21 +64,21 @@
       this.currentFps = 0;
     }
 
-    init(data) {
+    init(data: { socket: SocketLike; playerId: string | null }): void {
       this.socket = data.socket;
       this.playerId = data.playerId;
     }
 
-    create() {
+    create(): void {
       this.cameras.main.setBackgroundColor("#11181b");
-      this.gameInput = new GameInput(this);
+      this.gameInput = new GameInput(this as unknown as SceneLike);
       this.gameInput.create();
       this.tabKey = this.input.keyboard.addKey("TAB");
-      this.input.keyboard.on("keydown-TAB", (event) => {
+      this.input.keyboard.on("keydown-TAB", (event: KeyboardEvent) => {
         event.preventDefault();
         window.TankClient.setScoreboardVisible(true);
       });
-      this.input.keyboard.on("keyup-TAB", (event) => {
+      this.input.keyboard.on("keyup-TAB", (event: KeyboardEvent) => {
         event.preventDefault();
         window.TankClient.setScoreboardVisible(false);
       });
@@ -59,7 +86,7 @@
       this.drawStaticMap();
     }
 
-    setState(state) {
+    setState(state: PublicGameState): void {
       this.latestState = state;
       this.syncRenderPlayers(state);
       if (state.mapVersion && this.latestMapState && state.mapVersion !== this.latestMapState.mapVersion) {
@@ -67,25 +94,25 @@
       }
     }
 
-    setMapState(mapState) {
+    setMapState(mapState: PublicMapState): void {
       this.latestMapState = mapState;
       this.drawStaticMap();
     }
 
-    setPlayerId(playerId) {
+    setPlayerId(playerId: string | null): void {
       this.playerId = playerId;
     }
 
-    update(time, delta = 1000 / 60) {
+    update(_time: number, delta = 1000 / 60): void {
       this.updateFps();
-      this.gameInput.send(false);
+      this.gameInput?.send(false);
       const dt = Math.min(delta / 1000, MAX_FRAME_DELTA);
       this.interpolatePlayers(dt);
       this.renderState();
     }
 
-    syncRenderPlayers(state) {
-      const seenIds = new Set();
+    syncRenderPlayers(state: PublicGameState): void {
+      const seenIds = new Set<string>();
       for (const player of state.players) {
         seenIds.add(player.id);
         let render = this.renderPlayers.get(player.id);
@@ -127,7 +154,7 @@
       }
     }
 
-    interpolatePlayers(dt) {
+    interpolatePlayers(dt: number): void {
       const blend = Math.min(1, dt * POSITION_INTERPOLATION);
       for (const [id, render] of this.renderPlayers) {
         if (!render.alive || id === this.playerId) continue;
@@ -143,7 +170,7 @@
       }
     }
 
-    clearSceneObjects() {
+    clearSceneObjects(): void {
       for (const child of [...this.children.list]) {
         child.destroy();
       }
@@ -156,7 +183,7 @@
       this.mapImage = null;
     }
 
-    drawStaticMap() {
+    drawStaticMap(): void {
       if (!this.latestMapState) {
         this.drawEmptyMap();
         return;
@@ -212,13 +239,14 @@
 
       bg.generateTexture(textureKey, WORLD_WIDTH, WORLD_HEIGHT);
       bg.destroy();
-      this.mapImage = this.add.image(0, 0, textureKey);
-      this.mapImage.setOrigin(0, 0);
-      this.mapImage.setDepth(0);
+      const mapImage = this.add.image(0, 0, textureKey);
+      mapImage.setOrigin(0, 0);
+      mapImage.setDepth(0);
+      this.mapImage = mapImage;
       this.mapTextureKey = textureKey;
     }
 
-    drawEmptyMap() {
+    drawEmptyMap(): void {
       if (this.lastMapKey === "empty") return;
       this.lastMapKey = "empty";
       this.clearSceneObjects();
@@ -230,19 +258,21 @@
         bg.generateTexture(textureKey, WORLD_WIDTH, WORLD_HEIGHT);
         bg.destroy();
       }
-      this.mapImage = this.add.image(0, 0, textureKey);
-      this.mapImage.setOrigin(0, 0);
-      this.mapImage.setDepth(0);
+      const mapImage = this.add.image(0, 0, textureKey);
+      mapImage.setOrigin(0, 0);
+      mapImage.setDepth(0);
+      this.mapImage = mapImage;
     }
 
-    renderState() {
+    renderState(): void {
       if (!this.latestState) return;
       this.renderTanks();
       this.renderBullets();
     }
 
-    renderTanks() {
-      const aliveIds = new Set();
+    renderTanks(): void {
+      if (!this.latestState) return;
+      const aliveIds = new Set<string>();
       for (const player of this.latestState.players) {
         if (!player.alive || !player.team) continue;
         const render = this.renderPlayers.get(player.id) || player;
@@ -252,9 +282,9 @@
         const tankTextureKey = window.TankGameRenderers.tankTextureKey(player, this.playerId);
         const barrelTextureKey = `tank-barrel-${player.team}`;
         aliveIds.add(player.id);
-        let tank = this.tankSprites.get(player.id);
-        if (!tank) {
-          tank = this.add.image(x, y, tankTextureKey);
+        const existingTank = this.tankSprites.get(player.id);
+        const tank = existingTank || this.add.image(x, y, tankTextureKey);
+        if (!existingTank) {
           tank.setDepth(10);
           this.tankSprites.set(player.id, tank);
         }
@@ -264,9 +294,9 @@
         tank.setPosition(x, y);
         tank.setAlpha(window.TankGameRenderers.tankAlpha(player, this.latestState, this.latestMapState));
 
-        let barrel = this.tankBarrels.get(player.id);
-        if (!barrel) {
-          barrel = this.add.image(x, y, barrelTextureKey);
+        const existingBarrel = this.tankBarrels.get(player.id);
+        const barrel = existingBarrel || this.add.image(x, y, barrelTextureKey);
+        if (!existingBarrel) {
           barrel.setOrigin(5 / 48, 0.5);
           barrel.setDepth(11);
           this.tankBarrels.set(player.id, barrel);
@@ -278,15 +308,15 @@
         barrel.setRotation(angle);
         barrel.setAlpha(tank.alpha);
 
-        let name = this.nameTexts.get(player.id);
-        if (!name) {
-          name = this.add.text(0, 0, "", {
+        const existingName = this.nameTexts.get(player.id);
+        const name = existingName || this.add.text(0, 0, "", {
             fontFamily: "Trebuchet MS, Microsoft YaHei, sans-serif",
             fontSize: "13px",
             color: "#f1f5ef",
             stroke: "#101417",
             strokeThickness: 3,
           });
+        if (!existingName) {
           name.setOrigin(0.5, 1);
           name.setDepth(14);
           name.lastText = "";
@@ -300,9 +330,9 @@
         name.setPosition(x, y - 32);
         name.setAlpha(tank.alpha);
 
-        let hp = this.hpBars.get(player.id);
-        if (!hp) {
-          hp = this.add.graphics();
+        const existingHp = this.hpBars.get(player.id);
+        const hp = existingHp || this.add.graphics();
+        if (!existingHp) {
           hp.setDepth(13);
           hp.lastHp = null;
           this.hpBars.set(player.id, hp);
@@ -344,8 +374,8 @@
       }
     }
 
-    createSpriteTextures() {
-      for (const team of Object.keys(TEAM_COLORS)) {
+    createSpriteTextures(): void {
+      for (const team of Object.keys(TEAM_COLORS) as Team[]) {
         this.createTankBodyTexture(`tank-body-${team}`, team, false);
         this.createTankBodyTexture(`tank-body-${team}-self`, team, true);
         this.createTankBarrelTexture(`tank-barrel-${team}`, team);
@@ -353,7 +383,7 @@
       }
     }
 
-    createTankBodyTexture(key, team, isSelf) {
+    createTankBodyTexture(key: string, team: Team, isSelf: boolean): void {
       if (this.textures.exists(key)) return;
       const mainColor = TEAM_COLORS[team] || 0xffffff;
       const darkColor = TEAM_DARK[team] || 0x888888;
@@ -372,7 +402,7 @@
       g.destroy();
     }
 
-    createTankBarrelTexture(key, team) {
+    createTankBarrelTexture(key: string, team: Team): void {
       if (this.textures.exists(key)) return;
       const mainColor = TEAM_COLORS[team] || 0xffffff;
       const g = this.add.graphics();
@@ -384,7 +414,7 @@
       g.destroy();
     }
 
-    createBulletTexture(key, team) {
+    createBulletTexture(key: string, team: Team): void {
       if (this.textures.exists(key)) return;
       const g = this.add.graphics({ x: 7, y: 7 });
       g.fillStyle(team === "red" ? 0xffb1a7 : 0xaed2ff, 1);
@@ -395,7 +425,7 @@
       g.destroy();
     }
 
-    updateFps() {
+    updateFps(): void {
       const now = performance.now();
       if (this.lastFrameAt) {
         const delta = now - this.lastFrameAt;
@@ -413,14 +443,15 @@
       }
     }
 
-    renderBullets() {
-      const ids = new Set();
+    renderBullets(): void {
+      if (!this.latestState) return;
+      const ids = new Set<string>();
       for (const bullet of this.latestState.bullets) {
         ids.add(bullet.id);
-        let sprite = this.bulletSprites.get(bullet.id);
         const textureKey = `bullet-${bullet.team}`;
-        if (!sprite) {
-          sprite = this.add.image(bullet.x, bullet.y, textureKey);
+        const existingSprite = this.bulletSprites.get(bullet.id);
+        const sprite = existingSprite || this.add.image(bullet.x, bullet.y, textureKey);
+        if (!existingSprite) {
           sprite.setDepth(9);
           this.bulletSprites.set(bullet.id, sprite);
         }
@@ -438,17 +469,17 @@
 
   }
 
-  let phaserGame = null;
-  let scene = null;
+  let phaserGame: PhaserGameLike | null = null;
+  let scene: TankBattleScene | null = null;
 
   window.TankGame = {
     lastFps: 0,
-    start(socket, playerId) {
+    start(socket: SocketLike, playerId: string | null): void {
       if (phaserGame) {
-        scene.setPlayerId(playerId);
+        scene?.setPlayerId(playerId);
         return;
       }
-      phaserGame = new Phaser.Game({
+      const game = new Phaser.Game({
         type: Phaser.CANVAS,
         parent: "gameCanvasWrap",
         width: WORLD_WIDTH,
@@ -465,24 +496,25 @@
         },
         scene: TankBattleScene,
       });
-      phaserGame.events.once("ready", () => {
-        scene = phaserGame.scene.getScene("TankBattleScene");
+      phaserGame = game;
+      game.events.once("ready", () => {
+        scene = game.scene.getScene("TankBattleScene") as TankBattleScene;
         scene.socket = socket;
         scene.playerId = playerId;
       });
-      phaserGame.scene.start("TankBattleScene", { socket, playerId });
-      scene = phaserGame.scene.getScene("TankBattleScene");
+      game.scene.start("TankBattleScene", { socket, playerId });
+      scene = game.scene.getScene("TankBattleScene") as TankBattleScene;
     },
-    updateState(state) {
+    updateState(state: PublicGameState): void {
       if (scene) scene.setState(state);
     },
-    updateMapState(mapState) {
+    updateMapState(mapState: PublicMapState): void {
       if (scene) scene.setMapState(mapState);
     },
-    setPlayerId(playerId) {
+    setPlayerId(playerId: string | null): void {
       if (scene) scene.setPlayerId(playerId);
     },
-    getPerformanceStats() {
+    getPerformanceStats(): PerformanceStats {
       if (!scene || !scene.fpsSamples.length) return { avgFps: 0, minFps: 0, stableMinFps: 0, sampleCount: 0 };
       const samples = scene.fpsSamples.filter((fps) => Number.isFinite(fps) && fps > 0);
       const avgFps = samples.reduce((sum, fps) => sum + fps, 0) / samples.length;
@@ -492,9 +524,9 @@
       const stableMinFps = sorted[Math.floor(sorted.length * 0.01)] || minFps;
       return { avgFps, minFps, stableMinFps, p95LowFps, sampleCount: samples.length };
     },
-    getDebugSnapshot() {
+    getDebugSnapshot(): DebugSnapshot | null {
       if (!scene) return null;
-      const players = [];
+      const players: DebugPlayerSnapshot[] = [];
       for (const [id, render] of scene.renderPlayers) {
         const body = scene.tankSprites.get(id);
         const barrel = scene.tankBarrels.get(id);

@@ -1,5 +1,4 @@
 "use strict";
-// @ts-nocheck
 (function () {
     const WORLD_WIDTH = 1280;
     const WORLD_HEIGHT = 720;
@@ -68,10 +67,10 @@
             const payload = forceClear
                 ? { up: false, down: false, left: false, right: false, angle, firing: false }
                 : {
-                    up: Boolean(this.keys.up.isDown || this.keys.arrowUp.isDown),
-                    down: Boolean(this.keys.down.isDown || this.keys.arrowDown.isDown),
-                    left: Boolean(this.keys.left.isDown || this.keys.arrowLeft.isDown),
-                    right: Boolean(this.keys.right.isDown || this.keys.arrowRight.isDown),
+                    up: Boolean(this.keys?.up.isDown || this.keys?.arrowUp.isDown),
+                    down: Boolean(this.keys?.down.isDown || this.keys?.arrowDown.isDown),
+                    left: Boolean(this.keys?.left.isDown || this.keys?.arrowLeft.isDown),
+                    right: Boolean(this.keys?.right.isDown || this.keys?.arrowRight.isDown),
                     angle,
                     firing: this.pointerDown,
                 };

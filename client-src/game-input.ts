@@ -1,9 +1,8 @@
-// @ts-nocheck
 (function () {
   const WORLD_WIDTH = 1280;
   const WORLD_HEIGHT = 720;
 
-  function createInitialInputPayload() {
+  function createInitialInputPayload(): PlayerInput {
     return {
       up: false,
       down: false,
@@ -15,7 +14,13 @@
   }
 
   class GameInput {
-    constructor(scene) {
+    scene: SceneLike;
+    pointerDown: boolean;
+    mouseClient: Point;
+    payload: PlayerInput;
+    keys: InputKeys | null;
+
+    constructor(scene: SceneLike) {
       this.scene = scene;
       this.pointerDown = false;
       this.mouseClient = { x: 0, y: 0 };
@@ -23,7 +28,7 @@
       this.keys = null;
     }
 
-    create() {
+    create(): void {
       this.keys = this.scene.input.keyboard.addKeys({
         up: "W",
         down: "S",
@@ -50,7 +55,7 @@
       });
     }
 
-    send(forceClear) {
+    send(forceClear: boolean): void {
       const scene = this.scene;
       if (!scene.socket || !scene.latestState) return;
       const pointer = scene.input.activePointer;
@@ -70,15 +75,15 @@
       const payload = forceClear
         ? { up: false, down: false, left: false, right: false, angle, firing: false }
         : {
-            up: Boolean(this.keys.up.isDown || this.keys.arrowUp.isDown),
-            down: Boolean(this.keys.down.isDown || this.keys.arrowDown.isDown),
-            left: Boolean(this.keys.left.isDown || this.keys.arrowLeft.isDown),
-            right: Boolean(this.keys.right.isDown || this.keys.arrowRight.isDown),
+            up: Boolean(this.keys?.up.isDown || this.keys?.arrowUp.isDown),
+            down: Boolean(this.keys?.down.isDown || this.keys?.arrowDown.isDown),
+            left: Boolean(this.keys?.left.isDown || this.keys?.arrowLeft.isDown),
+            right: Boolean(this.keys?.right.isDown || this.keys?.arrowRight.isDown),
             angle,
             firing: this.pointerDown,
           };
 
-      const changed = Object.keys(payload).some((key) => payload[key] !== this.payload[key]);
+      const changed = (Object.keys(payload) as Array<keyof PlayerInput>).some((key) => payload[key] !== this.payload[key]);
       if (changed || payload.firing) {
         this.payload = payload;
         scene.socket.emit("playerInput", payload);

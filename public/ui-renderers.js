@@ -1,5 +1,4 @@
 "use strict";
-// @ts-nocheck
 (function () {
     const STATUS_NAMES = {
         waiting: "等待中",
@@ -63,7 +62,7 @@
             .map((player) => `
           <div class="scoreboard-row">
             <span>${escapeHtml(player.nickname)}</span>
-            <span>${TEAM_NAMES[player.team] || "-"}</span>
+            <span>${player.team ? TEAM_NAMES[player.team] : "-"}</span>
             <span>${player.kills}</span>
             <span>${player.deaths}</span>
           </div>
@@ -78,7 +77,7 @@
             .map((player) => `
           <div class="result-row">
             <span>${escapeHtml(player.nickname)}</span>
-            <span>${TEAM_NAMES[player.team] || "-"}</span>
+            <span>${player.team ? TEAM_NAMES[player.team] : "-"}</span>
             <span>${player.kills}</span>
             <span>${player.deaths}</span>
           </div>
