@@ -7,42 +7,8 @@
   const POSITION_INTERPOLATION = 24;
   const SNAP_DISTANCE = 96;
 
-  const TEAM_COLORS = {
-    red: 0xe24b4b,
-    blue: 0x3d8cff,
-  };
-
-  const TEAM_DARK = {
-    red: 0x7b2020,
-    blue: 0x1f4c94,
-  };
-
-  const MAP_PALETTES = {
-    snow: {
-      floor: 0xcfe7ef,
-      grid: 0xb6d4de,
-      hard: 0x6f8791,
-      brick: 0xbdd5da,
-      zone: 0x9bd8f0,
-      zoneAlpha: 0.36,
-    },
-    desert: {
-      floor: 0xd9b66b,
-      grid: 0xbf9854,
-      hard: 0x8a6742,
-      brick: 0xb9834d,
-      zone: 0xa9793d,
-      zoneAlpha: 0.44,
-    },
-    jungle: {
-      floor: 0x426c4a,
-      grid: 0x355a3e,
-      hard: 0x324235,
-      brick: 0x6c5938,
-      zone: 0x1f8c52,
-      zoneAlpha: 0.42,
-    },
-  };
+  const { GameInput } = window.TankGameInput;
+  const { MAP_PALETTES, TEAM_COLORS, TEAM_DARK } = window.TankGameRenderers;
 
   class TankBattleScene extends Phaser.Scene {
     constructor() {
@@ -51,9 +17,8 @@
       this.playerId = null;
       this.latestState = null;
       this.latestMapState = null;
-      this.keys = null;
       this.tabKey = null;
-      this.pointerDown = false;
+      this.gameInput = null;
       this.tankSprites = new Map();
       this.tankBarrels = new Map();
       this.nameTexts = new Map();
@@ -69,15 +34,6 @@
       this.lastFrameAt = 0;
       this.lastFpsUpdate = 0;
       this.currentFps = 0;
-      this.mouseClient = { x: 0, y: 0 };
-      this.inputPayload = {
-        up: false,
-        down: false,
-        left: false,
-        right: false,
-        angle: 0,
-        firing: false,
-      };
     }
 
     init(data) {
@@ -87,16 +43,8 @@
 
     create() {
       this.cameras.main.setBackgroundColor("#11181b");
-      this.keys = this.input.keyboard.addKeys({
-        up: "W",
-        down: "S",
-        left: "A",
-        right: "D",
-        arrowUp: "UP",
-        arrowDown: "DOWN",
-        arrowLeft: "LEFT",
-        arrowRight: "RIGHT",
-      });
+      this.gameInput = new GameInput(this);
+      this.gameInput.create();
       this.tabKey = this.input.keyboard.addKey("TAB");
       this.input.keyboard.on("keydown-TAB", (event) => {
         event.preventDefault();
@@ -105,20 +53,6 @@
       this.input.keyboard.on("keyup-TAB", (event) => {
         event.preventDefault();
         window.TankClient.setScoreboardVisible(false);
-      });
-      this.input.on("pointerdown", (pointer) => {
-        if (pointer.leftButtonDown()) this.pointerDown = true;
-      });
-      this.input.on("pointerup", () => {
-        this.pointerDown = false;
-      });
-      window.addEventListener("mousemove", (event) => {
-        this.mouseClient.x = event.clientX;
-        this.mouseClient.y = event.clientY;
-      });
-      window.addEventListener("blur", () => {
-        this.pointerDown = false;
-        this.sendInput(true);
       });
       this.createSpriteTextures();
       this.drawStaticMap();
@@ -143,7 +77,7 @@
 
     update(time, delta = 1000 / 60) {
       this.updateFps();
-      this.sendInput(false);
+      this.gameInput.send(false);
       const dt = Math.min(delta / 1000, MAX_FRAME_DELTA);
       this.interpolatePlayers(dt);
       this.renderState();
@@ -227,9 +161,7 @@
         return;
       }
 
-      const wallsVersion = this.latestMapState.walls
-        .map((wall) => `${wall.id}:${wall.alive ? 1 : 0}`)
-        .join("|");
+      const wallsVersion = window.TankGameRenderers.wallsVersion(this.latestMapState);
       if (
         this.lastMapKey === this.latestMapState.map &&
         this.lastMapVersion === this.latestMapState.mapVersion &&
@@ -316,28 +248,30 @@
         const x = render.x;
         const y = render.y;
         const angle = render.angle;
+        const tankTextureKey = window.TankGameRenderers.tankTextureKey(player, this.playerId);
+        const barrelTextureKey = `tank-barrel-${player.team}`;
         aliveIds.add(player.id);
         let tank = this.tankSprites.get(player.id);
         if (!tank) {
-          tank = this.add.image(x, y, this.tankTextureKey(player));
+          tank = this.add.image(x, y, tankTextureKey);
           tank.setDepth(10);
           this.tankSprites.set(player.id, tank);
         }
-        if (tank.texture.key !== this.tankTextureKey(player)) {
-          tank.setTexture(this.tankTextureKey(player));
+        if (tank.texture.key !== tankTextureKey) {
+          tank.setTexture(tankTextureKey);
         }
         tank.setPosition(x, y);
-        tank.setAlpha(this.tankAlpha(player));
+        tank.setAlpha(window.TankGameRenderers.tankAlpha(player, this.latestState, this.latestMapState));
 
         let barrel = this.tankBarrels.get(player.id);
         if (!barrel) {
-          barrel = this.add.image(x, y, `tank-barrel-${player.team}`);
+          barrel = this.add.image(x, y, barrelTextureKey);
           barrel.setOrigin(5 / 48, 0.5);
           barrel.setDepth(11);
           this.tankBarrels.set(player.id, barrel);
         }
-        if (barrel.texture.key !== `tank-barrel-${player.team}`) {
-          barrel.setTexture(`tank-barrel-${player.team}`);
+        if (barrel.texture.key !== barrelTextureKey) {
+          barrel.setTexture(barrelTextureKey);
         }
         barrel.setPosition(x, y);
         barrel.setRotation(angle);
@@ -460,21 +394,6 @@
       g.destroy();
     }
 
-    tankTextureKey(player) {
-      return `tank-body-${player.team}${player.id === this.playerId ? "-self" : ""}`;
-    }
-
-    tankAlpha(player) {
-      if (this.latestState.map === "jungle" && this.latestMapState) {
-        const inGrass = this.latestMapState.zones.some((zone) => {
-          return zone.type === "grass" && player.x >= zone.x && player.x <= zone.x + zone.w && player.y >= zone.y && player.y <= zone.y + zone.h;
-        });
-        if (inGrass) return 0.48;
-      }
-      if (player.invincible) return 0.62 + Math.sin(Date.now() / 80) * 0.18;
-      return 1;
-    }
-
     updateFps() {
       const now = performance.now();
       if (this.lastFrameAt) {
@@ -516,39 +435,6 @@
       }
     }
 
-    sendInput(forceClear) {
-      if (!this.socket || !this.latestState) return;
-      const pointer = this.input.activePointer;
-      const self = this.latestState.players.find((player) => player.id === this.playerId);
-      let angle = this.inputPayload.angle;
-      if (self) {
-        const canvas = this.game.canvas;
-        const rect = canvas.getBoundingClientRect();
-        const localX = ((this.mouseClient.x - rect.left) / rect.width) * WORLD_WIDTH;
-        const localY = ((this.mouseClient.y - rect.top) / rect.height) * WORLD_HEIGHT;
-        const worldPoint = Number.isFinite(localX) && Number.isFinite(localY)
-          ? { x: localX, y: localY }
-          : this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-        angle = Math.atan2(worldPoint.y - self.y, worldPoint.x - self.x);
-      }
-
-      const payload = forceClear
-        ? { up: false, down: false, left: false, right: false, angle, firing: false }
-        : {
-            up: Boolean(this.keys.up.isDown || this.keys.arrowUp.isDown),
-            down: Boolean(this.keys.down.isDown || this.keys.arrowDown.isDown),
-            left: Boolean(this.keys.left.isDown || this.keys.arrowLeft.isDown),
-            right: Boolean(this.keys.right.isDown || this.keys.arrowRight.isDown),
-            angle,
-            firing: this.pointerDown,
-          };
-
-      const changed = Object.keys(payload).some((key) => payload[key] !== this.inputPayload[key]);
-      if (changed || payload.firing) {
-        this.inputPayload = payload;
-        this.socket.emit("playerInput", payload);
-      }
-    }
   }
 
   let phaserGame = null;
@@ -596,13 +482,14 @@
       if (scene) scene.setPlayerId(playerId);
     },
     getPerformanceStats() {
-      if (!scene || !scene.fpsSamples.length) return { avgFps: 0, minFps: 0, sampleCount: 0 };
+      if (!scene || !scene.fpsSamples.length) return { avgFps: 0, minFps: 0, stableMinFps: 0, sampleCount: 0 };
       const samples = scene.fpsSamples.filter((fps) => Number.isFinite(fps) && fps > 0);
       const avgFps = samples.reduce((sum, fps) => sum + fps, 0) / samples.length;
       const minFps = Math.min(...samples);
       const sorted = [...samples].sort((a, b) => a - b);
       const p95LowFps = sorted[Math.floor(sorted.length * 0.05)] || minFps;
-      return { avgFps, minFps, p95LowFps, sampleCount: samples.length };
+      const stableMinFps = sorted[Math.floor(sorted.length * 0.01)] || minFps;
+      return { avgFps, minFps, stableMinFps, p95LowFps, sampleCount: samples.length };
     },
     getDebugSnapshot() {
       if (!scene) return null;

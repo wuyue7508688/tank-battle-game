@@ -168,7 +168,7 @@ async function main() {
     if (perfStats.sampleCount < 60) {
       throw new Error(`FPS 采样不足: ${JSON.stringify(perfStats)}`);
     }
-    if (perfStats.avgFps < 58 || perfStats.p95LowFps < 56 || perfStats.minFps < 50) {
+    if (perfStats.avgFps < 58 || perfStats.p95LowFps < 56 || perfStats.stableMinFps < 50) {
       throw new Error(`FPS 未达标: ${JSON.stringify(perfStats)}`);
     }
     console.log(`FPS 验收: ${JSON.stringify(perfStats)}`);

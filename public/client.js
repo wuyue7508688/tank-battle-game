@@ -73,17 +73,7 @@
     time: "时间制",
   };
 
-  const STATUS_NAMES = {
-    waiting: "等待中",
-    countdown: "倒计时中",
-    playing: "游戏中",
-    ended: "已结束",
-  };
-
-  const TEAM_NAMES = {
-    red: "红队",
-    blue: "蓝队",
-  };
+  const { STATUS_NAMES, TEAM_NAMES } = window.TankUiRenderers;
 
   function showView(name) {
     for (const [viewName, element] of Object.entries(views)) {
@@ -142,22 +132,7 @@
     }
 
     els.roomList.className = "room-list";
-    els.roomList.innerHTML = rooms
-      .map((room) => {
-        const disabled = room.canJoin ? "" : "disabled";
-        const action = room.status === "ended" ? "进入" : "加入";
-        return `
-          <div class="room-row">
-            <div><strong>${room.code}</strong><br><span>${room.mapName} / ${room.modeName}</span></div>
-            <span>${room.playerCount}/${room.maxPlayers} 人</span>
-            <span>${STATUS_NAMES[room.status]}</span>
-            <span>${room.canJoin ? "可加入" : "禁止加入"}</span>
-            <span>${room.mode === "score" ? "目标分" : "时间制"}</span>
-            <button type="button" data-room-id="${room.id}" ${disabled}>${action}</button>
-          </div>
-        `;
-      })
-      .join("");
+    els.roomList.innerHTML = window.TankUiRenderers.renderRoomListHtml(rooms);
   }
 
   function renderRoom(room) {
@@ -206,19 +181,7 @@
   }
 
   function renderTeamList(team, element, players) {
-    const teamPlayers = players.filter((player) => player.team === team);
-    if (!teamPlayers.length) {
-      element.innerHTML = `<div class="player-row"><span>空位</span><span>0/4</span></div>`;
-      return;
-    }
-    element.innerHTML = teamPlayers
-      .map((player) => `
-        <div class="player-row ${player.online ? "" : "offline"}">
-          <span>${escapeHtml(player.nickname)} ${player.online ? "" : "（离线）"}</span>
-          <span>${player.isHost ? '<b class="host">房主</b>' : ""}</span>
-        </div>
-      `)
-      .join("");
+    element.innerHTML = window.TankUiRenderers.renderTeamListHtml(team, players);
   }
 
   function updateRoomConfig() {
@@ -268,23 +231,7 @@
       return;
     }
     els.scoreboard.classList.remove("hidden");
-    const players = [...gameState.players].sort((a, b) => {
-      if (a.team === b.team) return b.kills - a.kills;
-      return a.team === "red" ? -1 : 1;
-    });
-    els.scoreboard.innerHTML = `
-      <div class="scoreboard-row header"><span>玩家</span><span>队伍</span><span>击杀</span><span>死亡</span></div>
-      ${players
-        .map((player) => `
-          <div class="scoreboard-row">
-            <span>${escapeHtml(player.nickname)}</span>
-            <span>${TEAM_NAMES[player.team] || "-"}</span>
-            <span>${player.kills}</span>
-            <span>${player.deaths}</span>
-          </div>
-        `)
-        .join("")}
-    `;
+    els.scoreboard.innerHTML = window.TankUiRenderers.renderScoreboardHtml(gameState.players);
   }
 
   function renderResults(info) {
@@ -293,19 +240,7 @@
     els.resultTitle.textContent = winnerText;
     els.resultScore.textContent = `${info.redScore} : ${info.blueScore}`;
     const players = info.players || [];
-    els.resultPlayers.innerHTML = `
-      <div class="result-row header"><span>玩家</span><span>队伍</span><span>击杀</span><span>死亡</span></div>
-      ${players
-        .map((player) => `
-          <div class="result-row">
-            <span>${escapeHtml(player.nickname)}</span>
-            <span>${TEAM_NAMES[player.team] || "-"}</span>
-            <span>${player.kills}</span>
-            <span>${player.deaths}</span>
-          </div>
-        `)
-        .join("")}
-    `;
+    els.resultPlayers.innerHTML = window.TankUiRenderers.renderResultsHtml(players);
   }
 
   function formatTime(seconds) {
@@ -320,15 +255,6 @@
     if (state.hudCache[key] === text) return;
     state.hudCache[key] = text;
     element.textContent = text;
-  }
-
-  function escapeHtml(value) {
-    return String(value)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
   }
 
   function initEvents() {
