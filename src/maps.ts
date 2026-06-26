@@ -1,16 +1,25 @@
-const {
-  MAP_NAMES,
-  TANK_RADIUS,
-  TANK_SIZE,
-} = require("./game-constants");
+import { MAP_NAMES, TANK_RADIUS, TANK_SIZE } from "./game-constants";
+import type {
+  Bullet,
+  MapDefinition,
+  MapKey,
+  Player,
+  PublicMapState,
+  Rect,
+  Room,
+  Wall,
+  WallType,
+  Zone,
+  ZoneType,
+} from "./types";
 
 let nextWallId = 1;
 
-function clamp(value, min, max) {
+export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function circleRectCollides(cx, cy, radius, rect) {
+export function circleRectCollides(cx: number, cy: number, radius: number, rect: Rect): boolean {
   const nearestX = clamp(cx, rect.x, rect.x + rect.w);
   const nearestY = clamp(cy, rect.y, rect.y + rect.h);
   const dx = cx - nearestX;
@@ -18,11 +27,11 @@ function circleRectCollides(cx, cy, radius, rect) {
   return dx * dx + dy * dy <= radius * radius;
 }
 
-function rectsOverlap(a, b) {
+export function rectsOverlap(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
-function tankRect(player) {
+export function tankRect(player: Player): Rect {
   return {
     x: player.x - TANK_RADIUS,
     y: player.y - TANK_RADIUS,
@@ -31,7 +40,7 @@ function tankRect(player) {
   };
 }
 
-function createWall(x, y, w, h, type) {
+function createWall(x: number, y: number, w: number, h: number, type: WallType): Wall {
   return {
     id: `wall-${nextWallId++}`,
     x,
@@ -43,15 +52,15 @@ function createWall(x, y, w, h, type) {
   };
 }
 
-function createZone(x, y, w, h, type) {
+function createZone(x: number, y: number, w: number, h: number, type: ZoneType): Zone {
   return { x, y, w, h, type };
 }
 
-function normalizeMapKey(value) {
-  return ["snow", "desert", "jungle"].includes(value) ? value : "snow";
+export function normalizeMapKey(value: unknown): MapKey {
+  return value === "snow" || value === "desert" || value === "jungle" ? value : "snow";
 }
 
-function createMapDefinition(key) {
+export function createMapDefinition(key: unknown): MapDefinition {
   const normalizedKey = normalizeMapKey(key);
   const commonHardWalls = [
     createWall(608, 0, 64, 128, "hard"),
@@ -76,7 +85,7 @@ function createMapDefinition(key) {
     createWall(1024, 224, 96, 32, "brick"),
   ];
 
-  const spawnPoints = {
+  const spawnPoints: MapDefinition["spawnPoints"] = {
     red: [
       { x: 96, y: 140 },
       { x: 96, y: 300 },
@@ -131,12 +140,12 @@ function createMapDefinition(key) {
   };
 }
 
-function markMapDirty(room) {
+export function markMapDirty(room: Room): void {
   room.mapVersion += 1;
   room.mapDirty = true;
 }
 
-function publicMapState(room) {
+export function publicMapState(room: Room): PublicMapState {
   return {
     roomId: room.id,
     map: room.map,
@@ -147,24 +156,24 @@ function publicMapState(room) {
   };
 }
 
-function isTankInZone(room, player, type) {
+export function isTankInZone(room: Room, player: Player, type: ZoneType): boolean {
   const rect = tankRect(player);
   return room.mapState.zones.some((zone) => zone.type === type && rectsOverlap(rect, zone));
 }
 
-function collidesWithWall(room, x, y) {
+export function collidesWithWall(room: Room, x: number, y: number): boolean {
   const rect = { x: x - TANK_RADIUS, y: y - TANK_RADIUS, w: TANK_SIZE, h: TANK_SIZE };
   return room.mapState.walls.some((wall) => wall.alive && rectsOverlap(rect, wall));
 }
 
-function movementModifiers(room, player) {
+export function movementModifiers(room: Room, player: Player): { onIce: boolean; onQuicksand: boolean } {
   return {
     onIce: room.map === "snow" && isTankInZone(room, player, "ice"),
     onQuicksand: room.map === "desert" && isTankInZone(room, player, "quicksand"),
   };
 }
 
-function hitWallWithBullet(room, bullet, bulletRadius) {
+export function hitWallWithBullet(room: Room, bullet: Bullet, bulletRadius: number): boolean {
   for (const wall of room.mapState.walls) {
     if (!wall.alive) continue;
     if (!circleRectCollides(bullet.x, bullet.y, bulletRadius, wall)) continue;
@@ -176,18 +185,3 @@ function hitWallWithBullet(room, bullet, bulletRadius) {
   }
   return false;
 }
-
-module.exports = {
-  clamp,
-  circleRectCollides,
-  rectsOverlap,
-  tankRect,
-  normalizeMapKey,
-  createMapDefinition,
-  markMapDirty,
-  publicMapState,
-  isTankInZone,
-  collidesWithWall,
-  movementModifiers,
-  hitWallWithBullet,
-};

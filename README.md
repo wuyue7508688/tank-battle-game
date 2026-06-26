@@ -102,6 +102,8 @@ Ctrl + C
 npm test
 ```
 
+`npm test` 会先运行 TypeScript 构建，再运行规则测试、Socket.IO 测试和浏览器 UI 测试。
+
 测试内容包括：
 
 - 服务器启动
@@ -118,15 +120,25 @@ npm test
 
 ```text
 .
-├── server.js              # 后端服务器和游戏规则
+├── server.ts              # 后端服务器入口
+├── src/                   # 后端规则 Module
+│   ├── game-room.ts       # 战斗规则
+│   ├── maps.ts            # 地图定义和地形规则
+│   ├── room-lifecycle.ts  # 房间生命周期规则
+│   ├── game-constants.ts  # 游戏常量
+│   └── types.ts           # 共享类型
+├── client-src/            # 前端 TypeScript 源码
 ├── public/
 │   ├── index.html         # 页面结构
 │   ├── styles.css         # 页面样式
-│   ├── client.js          # 大厅、房间、结算页逻辑
-│   └── game.js            # Phaser 游戏画面
+│   ├── client.js          # 编译后的大厅、房间、结算页逻辑
+│   └── game.js            # 编译后的 Phaser 游戏画面
 ├── scripts/
-│   ├── smoke-test.js      # Socket.IO 规则测试
-│   └── ui-test.js         # 浏览器 UI 验收测试
+│   ├── rules-test.ts      # 规则测试
+│   ├── smoke-test.ts      # Socket.IO 规则测试
+│   └── ui-test.ts         # 浏览器 UI 验收测试
+├── tsconfig.json
+├── tsconfig.client.json
 ├── REQUIREMENTS.md        # 需求文档
 ├── package.json
 └── package-lock.json

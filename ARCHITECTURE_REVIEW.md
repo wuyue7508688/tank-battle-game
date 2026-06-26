@@ -24,6 +24,14 @@
 NODE_OPTIONS="--max-old-space-size=4096" npm test
 ```
 
+后续已继续迁移到 TypeScript：
+
+- 后端入口改为 `server.ts`。
+- 后端规则 Module 改为 `src/*.ts`，并新增 `src/types.ts`。
+- 测试脚本改为 `scripts/*.ts`。
+- 前端源码放到 `client-src/*.ts`，构建输出仍在 `public/*.js`，浏览器继续加载 JS。
+- `npm start` 和 `npm test` 都会先运行 TypeScript 构建。
+
 - `server.js` 同时负责服务器启动、Socket.IO 事件、房间规则、地图生成、碰撞、炮弹、重生、胜负结算和对外数据格式。
 - `public/client.js` 同时负责页面切换、DOM 更新、Socket.IO 事件、本地状态和 HUD。
 - `public/game.js` 同时负责 Phaser 初始化、输入采集、网络输入发送、插值、地图绘制、坦克绘制、子弹绘制、FPS 统计和测试调试接口。

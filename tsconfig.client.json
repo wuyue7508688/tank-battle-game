@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "None",
+    "strict": false,
+    "noImplicitAny": false,
+    "checkJs": false,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "noEmitOnError": true,
+    "rootDir": "client-src",
+    "outDir": "public",
+    "ignoreDeprecations": "6.0",
+    "lib": ["DOM", "ES2021"],
+    "types": []
+  },
+  "files": [
+    "client-src/globals.d.ts",
+    "client-src/game-input.ts",
+    "client-src/game-renderers.ts",
+    "client-src/game.ts",
+    "client-src/ui-renderers.ts",
+    "client-src/client.ts"
+  ]
+}

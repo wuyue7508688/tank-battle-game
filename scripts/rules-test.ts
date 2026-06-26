@@ -1,17 +1,18 @@
-const assert = require("assert");
+import assert from "assert";
 
-const { ROOM_STATUS } = require("../src/game-constants");
-const { createMapDefinition } = require("../src/maps");
-const {
+import { ROOM_STATUS } from "../src/game-constants";
+import { createMapDefinition } from "../src/maps";
+import {
   damagePlayer,
   movePlayer,
   publicGameState,
   startCountdownIfReady,
   tickRoom,
   validateStart,
-} = require("../src/game-room");
+} from "../src/game-room";
+import type { Player, Room, Team } from "../src/types";
 
-function makePlayer(id, team = null) {
+function makePlayer(id: string, team: Team | null = null): Player {
   return {
     id,
     socketId: id,
@@ -38,8 +39,8 @@ function makePlayer(id, team = null) {
   };
 }
 
-function makeRoom(overrides = {}) {
-  const room = {
+function makeRoom(overrides: Partial<Room> = {}): Room {
+  const room: Room = {
     id: "room-1",
     code: "ABCD",
     hostId: "red",
@@ -65,16 +66,16 @@ function makeRoom(overrides = {}) {
   return Object.assign(room, overrides);
 }
 
-function makeStore(players) {
+function makeStore(players: Player[]): { getPlayer: (id: string) => Player | undefined } {
   const map = new Map(players.map((player) => [player.id, player]));
   return {
-    getPlayer(id) {
+    getPlayer(id: string) {
       return map.get(id);
     },
   };
 }
 
-function testStartValidationAndCountdown() {
+function testStartValidationAndCountdown(): void {
   const red = makePlayer("red", "red");
   const blue = makePlayer("blue", null);
   const room = makeRoom();
@@ -93,7 +94,7 @@ function testStartValidationAndCountdown() {
   assert.ok(events.some((event) => event.type === "gameStarted"));
 }
 
-function testScoreLimitEndsGame() {
+function testScoreLimitEndsGame(): void {
   const red = makePlayer("red", "red");
   const blue = makePlayer("blue", "blue");
   const room = makeRoom({ status: ROOM_STATUS.PLAYING, scoreLimit: 1 });
@@ -106,10 +107,10 @@ function testScoreLimitEndsGame() {
   assert.strictEqual(room.redScore, 1);
   assert.strictEqual(red.kills, 1);
   assert.strictEqual(blue.deaths, 1);
-  assert.strictEqual(room.endedInfo.winner, "red");
+  assert.strictEqual(room.endedInfo?.winner, "red");
 }
 
-function testTimeLimitDraw() {
+function testTimeLimitDraw(): void {
   const red = makePlayer("red", "red");
   const blue = makePlayer("blue", "blue");
   const room = makeRoom({
@@ -122,11 +123,11 @@ function testTimeLimitDraw() {
 
   const events = tickRoom(room, 2100, getPlayer);
   assert.strictEqual(room.status, ROOM_STATUS.ENDED);
-  assert.strictEqual(room.endedInfo.winner, null);
+  assert.strictEqual(room.endedInfo?.winner, null);
   assert.ok(events.some((event) => event.type === "gameEnded"));
 }
 
-function testTerrainMovement() {
+function testTerrainMovement(): void {
   const red = makePlayer("red", "red");
   const blue = makePlayer("blue", "blue");
   const desertRoom = makeRoom({
@@ -143,7 +144,7 @@ function testTerrainMovement() {
   assert.strictEqual(Math.round(red.x), 686);
 
   const state = publicGameState(desertRoom, getPlayer, 1000);
-  assert.strictEqual(state.players.find((player) => player.id === "red").x, 686);
+  assert.strictEqual(state.players.find((player) => player.id === "red")?.x, 686);
 }
 
 testStartValidationAndCountdown();

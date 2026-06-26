@@ -2,10 +2,11 @@
   "name": "lan-tank-battle",
   "version": "1.0.0",
   "description": "A LAN multiplayer tank battle game built with Express, Socket.IO, and Phaser 3.",
-  "main": "server.js",
+  "main": "dist/server.js",
   "scripts": {
-    "start": "node server.js",
-    "test": "node scripts/rules-test.js && node scripts/smoke-test.js && node scripts/ui-test.js"
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.client.json",
+    "start": "npm run build && node dist/server.js",
+    "test": "npm run build && node dist/scripts/rules-test.js && node dist/scripts/smoke-test.js && node dist/scripts/ui-test.js"
   },
   "dependencies": {
     "express": "^4.19.2",
@@ -13,8 +14,11 @@
     "socket.io": "^4.7.5"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.0.1",
     "playwright": "^1.45.3",
-    "socket.io-client": "^4.7.5"
+    "socket.io-client": "^4.7.5",
+    "typescript": "^6.0.3"
   },
   "engines": {
     "node": ">=18"

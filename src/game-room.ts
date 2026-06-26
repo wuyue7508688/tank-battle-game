@@ -1,4 +1,4 @@
-const {
+import {
   BULLET_RANGE,
   BULLET_RADIUS,
   BULLET_SPEED,
@@ -16,35 +16,47 @@ const {
   TEAMS,
   WORLD_HEIGHT,
   WORLD_WIDTH,
-} = require("./game-constants");
-const {
+} from "./game-constants";
+import {
   clamp,
   collidesWithWall,
   createMapDefinition,
   hitWallWithBullet,
   markMapDirty,
   movementModifiers,
-} = require("./maps");
+} from "./maps";
+import type {
+  GameEvent,
+  Player,
+  Point,
+  PublicGameState,
+  PublicPlayer,
+  PublicRoom,
+  Room,
+  Team,
+} from "./types";
+
+type GetPlayer = (playerId: string) => Player | undefined;
 
 let nextBulletId = 1;
 
-function distanceSq(a, b) {
+export function distanceSq(a: Point, b: Point): number {
   const dx = a.x - b.x;
   const dy = a.y - b.y;
   return dx * dx + dy * dy;
 }
 
-function normalizeVector(x, y) {
+export function normalizeVector(x: number, y: number): Point {
   const length = Math.hypot(x, y);
   if (length === 0) return { x: 0, y: 0 };
   return { x: x / length, y: y / length };
 }
 
-function shortName(name) {
+export function shortName(name: string): string {
   return name.length > 6 ? `${name.slice(0, 3)}...` : name;
 }
 
-function publicPlayer(player, now = Date.now()) {
+export function publicPlayer(player: Player, now = Date.now()): PublicPlayer {
   return {
     id: player.id,
     nickname: player.nickname,
@@ -64,7 +76,15 @@ function publicPlayer(player, now = Date.now()) {
   };
 }
 
-function publicRoom(room, getPlayer, now = Date.now()) {
+function presentPlayer(player: Player | undefined): player is Player {
+  return Boolean(player);
+}
+
+function onlinePlayer(player: Player | undefined): player is Player {
+  return Boolean(player && player.online);
+}
+
+export function publicRoom(room: Room, getPlayer: GetPlayer, now = Date.now()): PublicRoom {
   return {
     id: room.id,
     code: room.code,
@@ -79,13 +99,13 @@ function publicRoom(room, getPlayer, now = Date.now()) {
     redScore: room.redScore,
     blueScore: room.blueScore,
     maxPlayers: 8,
-    players: [...room.players].map((id) => getPlayer(id)).filter(Boolean).map((player) => publicPlayer(player, now)),
+    players: [...room.players].map((id) => getPlayer(id)).filter(presentPlayer).map((player) => publicPlayer(player, now)),
     countdownEndsAt: room.countdownEndsAt,
     endedInfo: room.endedInfo,
   };
 }
 
-function publicGameState(room, getPlayer, now = Date.now()) {
+export function publicGameState(room: Room, getPlayer: GetPlayer, now = Date.now()): PublicGameState {
   const remainingSeconds = room.mode === "time" && room.startedAt
     ? Math.max(0, Math.ceil(room.timeLimit - (now - room.startedAt) / 1000))
     : null;
@@ -103,7 +123,7 @@ function publicGameState(room, getPlayer, now = Date.now()) {
     blueScore: room.blueScore,
     players: [...room.players]
       .map((id) => getPlayer(id))
-      .filter((player) => player && player.online)
+      .filter(onlinePlayer)
       .map((player) => ({
         id: player.id,
         nickname: player.nickname,
@@ -130,7 +150,7 @@ function publicGameState(room, getPlayer, now = Date.now()) {
   };
 }
 
-function clearPlayerCombatState(player) {
+export function clearPlayerCombatState(player: Player): void {
   player.hp = 3;
   player.alive = true;
   player.invincibleUntil = 0;
@@ -141,8 +161,8 @@ function clearPlayerCombatState(player) {
   player.lastInput = { up: false, down: false, left: false, right: false, angle: 0, firing: false };
 }
 
-function getTeamCounts(room, getPlayer) {
-  const counts = { red: 0, blue: 0 };
+export function getTeamCounts(room: Room, getPlayer: GetPlayer): Record<Team, number> {
+  const counts: Record<Team, number> = { red: 0, blue: 0 };
   for (const playerId of room.players) {
     const player = getPlayer(playerId);
     if (player && player.online && player.team) {
@@ -152,15 +172,15 @@ function getTeamCounts(room, getPlayer) {
   return counts;
 }
 
-function getOnlinePlayers(room, getPlayer) {
-  return [...room.players].map((id) => getPlayer(id)).filter((player) => player && player.online);
+export function getOnlinePlayers(room: Room, getPlayer: GetPlayer): Player[] {
+  return [...room.players].map((id) => getPlayer(id)).filter(onlinePlayer);
 }
 
-function playerCanCollide(player) {
-  return player.online && player.alive && player.team;
+export function playerCanCollide(player: Player): boolean {
+  return Boolean(player.online && player.alive && player.team);
 }
 
-function chooseSpawn(room, team, getPlayer) {
+export function chooseSpawn(room: Room, team: Team, getPlayer: GetPlayer): Point {
   const points = room.mapState.spawnPoints[team];
   const livePlayers = getOnlinePlayers(room, getPlayer).filter((player) => player.alive);
   const enemies = livePlayers.filter((player) => player.team !== team);
@@ -184,7 +204,8 @@ function chooseSpawn(room, team, getPlayer) {
   return best;
 }
 
-function spawnPlayer(room, player, getPlayer, now = Date.now(), invincible = true) {
+export function spawnPlayer(room: Room, player: Player, getPlayer: GetPlayer, now = Date.now(), invincible = true): void {
+  if (!player.team) return;
   const spawn = chooseSpawn(room, player.team, getPlayer);
   player.x = spawn.x;
   player.y = spawn.y;
@@ -197,7 +218,7 @@ function spawnPlayer(room, player, getPlayer, now = Date.now(), invincible = tru
   player.velocityY = 0;
 }
 
-function resetRoomForMatch(room, getPlayer, now = Date.now()) {
+export function resetRoomForMatch(room: Room, getPlayer: GetPlayer, now = Date.now()): void {
   room.status = ROOM_STATUS.COUNTDOWN;
   room.redScore = 0;
   room.blueScore = 0;
@@ -220,7 +241,7 @@ function resetRoomForMatch(room, getPlayer, now = Date.now()) {
   }
 }
 
-function endGame(room, winner, reason, getPlayer, now = Date.now()) {
+export function endGame(room: Room, winner: Team | null, reason: string, getPlayer: GetPlayer, now = Date.now()): GameEvent | null {
   if (room.status === ROOM_STATUS.ENDED) return null;
   room.status = ROOM_STATUS.ENDED;
   room.endedAt = now;
@@ -231,12 +252,12 @@ function endGame(room, winner, reason, getPlayer, now = Date.now()) {
     reason,
     redScore: room.redScore,
     blueScore: room.blueScore,
-    players: [...room.players].map((id) => getPlayer(id)).filter(Boolean).map((player) => publicPlayer(player, now)),
+    players: [...room.players].map((id) => getPlayer(id)).filter(presentPlayer).map((player) => publicPlayer(player, now)),
   };
   return { type: "gameEnded", info: room.endedInfo };
 }
 
-function validateStart(room, getPlayer) {
+export function validateStart(room: Room, getPlayer: GetPlayer): string {
   const onlinePlayers = getOnlinePlayers(room, getPlayer);
   if (onlinePlayers.length < 2) return "至少 2 人才能开始。";
   if (onlinePlayers.some((player) => !player.team)) return "有玩家未选择队伍。";
@@ -245,14 +266,14 @@ function validateStart(room, getPlayer) {
   return "";
 }
 
-function collidesWithTank(room, player, x, y, getPlayer) {
+function collidesWithTank(room: Room, player: Player, x: number, y: number, getPlayer: GetPlayer): boolean {
   return getOnlinePlayers(room, getPlayer).some((other) => {
     if (other.id === player.id || !playerCanCollide(other)) return false;
     return distanceSq({ x, y }, other) < TANK_SIZE * TANK_SIZE;
   });
 }
 
-function movePlayer(room, player, dt, getPlayer) {
+export function movePlayer(room: Room, player: Player, dt: number, getPlayer: GetPlayer): void {
   if (!playerCanCollide(player)) return;
 
   const input = player.lastInput;
@@ -300,8 +321,8 @@ function movePlayer(room, player, dt, getPlayer) {
   }
 }
 
-function tryFire(room, player, now) {
-  if (!playerCanCollide(player)) return;
+export function tryFire(room: Room, player: Player, now: number): void {
+  if (!playerCanCollide(player) || !player.team) return;
   if (now < player.invincibleUntil) return;
   if (!player.lastInput.firing) return;
   if (now - player.lastFireAt < FIRE_COOLDOWN_MS) return;
@@ -320,7 +341,13 @@ function tryFire(room, player, now) {
   });
 }
 
-function damagePlayer(room, target, attackerId, now, getPlayer) {
+export function damagePlayer(
+  room: Room,
+  target: Player,
+  attackerId: string,
+  now: number,
+  getPlayer: GetPlayer,
+): { damaged: boolean; events: GameEvent[] } {
   if (now < target.invincibleUntil || !target.alive) return { damaged: false, events: [] };
 
   target.hp -= 1;
@@ -340,7 +367,7 @@ function damagePlayer(room, target, attackerId, now, getPlayer) {
     if (attacker.team === "blue") room.blueScore += 1;
   }
 
-  const events = [];
+  const events: GameEvent[] = [];
   if (room.mode === "score") {
     if (room.redScore >= room.scoreLimit) {
       const event = endGame(room, "red", "scoreLimit", getPlayer, now);
@@ -354,9 +381,9 @@ function damagePlayer(room, target, attackerId, now, getPlayer) {
   return { damaged: true, events };
 }
 
-function updateBullets(room, dt, now, getPlayer) {
+export function updateBullets(room: Room, dt: number, now: number, getPlayer: GetPlayer): GameEvent[] {
   const nextBullets = [];
-  const events = [];
+  const events: GameEvent[] = [];
 
   for (const bullet of room.bullets) {
     if (room.status !== ROOM_STATUS.PLAYING) break;
@@ -396,7 +423,7 @@ function updateBullets(room, dt, now, getPlayer) {
   return events;
 }
 
-function updateRespawns(room, now, getPlayer) {
+export function updateRespawns(room: Room, now: number, getPlayer: GetPlayer): void {
   for (const player of getOnlinePlayers(room, getPlayer)) {
     if (!player.team || player.alive || !player.respawnAt) continue;
     if (now >= player.respawnAt) {
@@ -405,7 +432,7 @@ function updateRespawns(room, now, getPlayer) {
   }
 }
 
-function updateEmptyTeams(room, now, getPlayer) {
+export function updateEmptyTeams(room: Room, now: number, getPlayer: GetPlayer): GameEvent[] {
   if (room.status !== ROOM_STATUS.PLAYING) return [];
   const counts = getTeamCounts(room, getPlayer);
 
@@ -430,33 +457,33 @@ function updateEmptyTeams(room, now, getPlayer) {
   return event ? [event] : [];
 }
 
-function updateTimeLimit(room, now, getPlayer) {
+export function updateTimeLimit(room: Room, now: number, getPlayer: GetPlayer): GameEvent[] {
   if (room.status !== ROOM_STATUS.PLAYING || room.mode !== "time" || !room.startedAt) return [];
   const elapsed = (now - room.startedAt) / 1000;
   if (elapsed < room.timeLimit) return [];
-  let winner = null;
+  let winner: Team | null = null;
   if (room.redScore > room.blueScore) winner = "red";
   if (room.blueScore > room.redScore) winner = "blue";
   const event = endGame(room, winner, "timeLimit", getPlayer, now);
   return event ? [event] : [];
 }
 
-function startCountdownIfReady(room, getPlayer, now = Date.now()) {
+export function startCountdownIfReady(room: Room, getPlayer: GetPlayer, now = Date.now()): { ok: true; events: GameEvent[] } | { ok: false; error: string; events: GameEvent[] } {
   const error = validateStart(room, getPlayer);
   if (error) return { ok: false, error, events: [] };
   resetRoomForMatch(room, getPlayer, now);
   return {
     ok: true,
     events: [
-      { type: "countdown", endsAt: room.countdownEndsAt },
+      { type: "countdown", endsAt: room.countdownEndsAt ?? undefined },
       { type: "roomState" },
       { type: "mapState" },
     ],
   };
 }
 
-function tickRoom(room, now, getPlayer) {
-  const events = [];
+export function tickRoom(room: Room, now: number, getPlayer: GetPlayer): GameEvent[] {
+  const events: GameEvent[] = [];
 
   if (room.status === ROOM_STATUS.COUNTDOWN && room.countdownEndsAt && now >= room.countdownEndsAt) {
     room.status = ROOM_STATUS.PLAYING;
@@ -480,8 +507,8 @@ function tickRoom(room, now, getPlayer) {
   return events;
 }
 
-function awardPointForTest(room, team, getPlayer, now = Date.now()) {
-  if (!TEAMS.includes(team)) return [];
+export function awardPointForTest(room: Room, team: string, getPlayer: GetPlayer, now = Date.now()): GameEvent[] {
+  if (team !== "red" && team !== "blue") return [];
   if (team === "red") room.redScore += 1;
   if (team === "blue") room.blueScore += 1;
   if (room.mode !== "score") return [];
@@ -493,31 +520,3 @@ function awardPointForTest(room, team, getPlayer, now = Date.now()) {
       : null;
   return event ? [event] : [];
 }
-
-module.exports = {
-  distanceSq,
-  normalizeVector,
-  shortName,
-  publicPlayer,
-  publicRoom,
-  publicGameState,
-  clearPlayerCombatState,
-  getTeamCounts,
-  getOnlinePlayers,
-  playerCanCollide,
-  chooseSpawn,
-  spawnPlayer,
-  resetRoomForMatch,
-  endGame,
-  validateStart,
-  movePlayer,
-  tryFire,
-  damagePlayer,
-  updateBullets,
-  updateRespawns,
-  updateEmptyTeams,
-  updateTimeLimit,
-  startCountdownIfReady,
-  tickRoom,
-  awardPointForTest,
-};
